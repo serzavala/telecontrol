@@ -1,0 +1,71 @@
+// Devuelve el lunes de la semana actual + offset
+export function getSemana(offset = 0) {
+  const hoy = new Date()
+  const dow = hoy.getDay() === 0 ? 6 : hoy.getDay() - 1
+  const lunes = new Date(hoy)
+  lunes.setDate(hoy.getDate() - dow + offset * 7)
+  const dom = new Date(lunes)
+  dom.setDate(lunes.getDate() + 6)
+  return {
+    ini: lunes.toISOString().split('T')[0],
+    fin: dom.toISOString().split('T')[0],
+    lunes,
+    dom,
+  }
+}
+
+export function fmtSemanaLabel(s) {
+  const opts = { day: 'numeric', month: 'short' }
+  return (
+    s.lunes.toLocaleDateString('es-MX', opts) +
+    ' – ' +
+    s.dom.toLocaleDateString('es-MX', { ...opts, year: 'numeric' })
+  )
+}
+
+// Array de N semanas hacia atrás desde la semana actual
+export function getSemanas(n) {
+  const hoy = new Date()
+  const dow = hoy.getDay() === 0 ? 6 : hoy.getDay() - 1
+  const lunesActual = new Date(hoy)
+  lunesActual.setDate(hoy.getDate() - dow)
+  const sems = []
+  for (let i = n - 1; i >= 0; i--) {
+    const lunes = new Date(lunesActual)
+    lunes.setDate(lunesActual.getDate() - i * 7)
+    const dom = new Date(lunes)
+    dom.setDate(lunes.getDate() + 6)
+    sems.push({
+      ini: lunes.toISOString().split('T')[0],
+      fin: dom.toISOString().split('T')[0],
+      label: lunes.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+    })
+  }
+  return sems
+}
+
+// Info de próximos cortes CN basada en la fecha de hoy
+export function getInfoCortesCN() {
+  const hoy = new Date()
+  const d = hoy.getDate()
+  const ult = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate()
+  const pen = ult - 1
+
+  if (d === 14) return { tipo: 'warn', msg: 'Hoy es día 14 — corte 1ª quincena CN. Genera el PDF hoy.' }
+  if (d === 15) return { tipo: 'success', msg: 'Hoy es día 15 — día de cobro 1ª quincena CN.' }
+  if (d === pen) return { tipo: 'warn', msg: `Hoy es día ${d} — corte 2ª quincena CN. Genera el PDF hoy.` }
+  if (d === ult) return { tipo: 'success', msg: 'Último día del mes — cobro 2ª quincena CN.' }
+  if (d < 14) return { tipo: 'info', msg: `Faltan ${14 - d} día${14 - d > 1 ? 's' : ''} para el corte CN del día 14.` }
+  if (d > 15 && d < pen) {
+    const ds = pen - d
+    return { tipo: 'info', msg: `Faltan ${ds} día${ds > 1 ? 's' : ''} para el corte CN del día ${pen}.` }
+  }
+  return null
+}
+
+export function getPeriodoCN(quincena, mes, anio) {
+  const ult = new Date(anio, mes, 0).getDate()
+  return quincena === '1'
+    ? `1 al 15 de ${anio}-${String(mes).padStart(2, '0')}`
+    : `16 al ${ult} de ${anio}-${String(mes).padStart(2, '0')}`
+}
