@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 export default function LoginPage() {
-  const { signIn, signUp } = useAuth()
+  const { signIn } = useAuth()
   const navigate = useNavigate()
-  const [modo, setModo] = useState('login') // 'login' | 'registro'
-  const [form, setForm] = useState({ nombre: '', email: '', password: '' })
+  const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -16,16 +15,9 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    if (modo === 'login') {
-      const { error } = await signIn(form.email, form.password)
-      if (error) setError('Correo o contraseña incorrectos.')
-      else navigate('/dashboard')
-    } else {
-      if (!form.nombre) { setError('Ingresa tu nombre.'); setLoading(false); return }
-      const { error } = await signUp(form.email, form.password, form.nombre)
-      if (error) setError(error.message)
-      else { setModo('login'); setError('Cuenta creada. Ya puedes iniciar sesión.') }
-    }
+    const { error } = await signIn(form.email, form.password)
+    if (error) setError('Correo o contraseña incorrectos.')
+    else navigate('/dashboard')
     setLoading(false)
   }
 
@@ -38,48 +30,49 @@ export default function LoginPage() {
         </div>
 
         <div className="card">
-          <div className="flex mb-6 border border-gray-200 rounded-lg overflow-hidden">
-            {['login', 'registro'].map(m => (
-              <button
-                key={m}
-                onClick={() => { setModo(m); setError('') }}
-                className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                  modo === m ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                {m === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
-              </button>
-            ))}
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-3">
-            {modo === 'registro' && (
-              <div>
-                <label className="label">Nombre completo</label>
-                <input className="input" type="text" value={form.nombre} onChange={set('nombre')} placeholder="Tu nombre" />
-              </div>
-            )}
             <div>
               <label className="label">Correo electrónico</label>
-              <input className="input" type="email" value={form.email} onChange={set('email')} placeholder="correo@empresa.com" required />
+              <input
+                className="input"
+                type="email"
+                value={form.email}
+                onChange={set('email')}
+                placeholder="correo@empresa.com"
+                required
+              />
             </div>
             <div>
               <label className="label">Contraseña</label>
-              <input className="input" type="password" value={form.password} onChange={set('password')} placeholder="••••••••" required minLength={6} />
+              <input
+                className="input"
+                type="password"
+                value={form.password}
+                onChange={set('password')}
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
             </div>
 
             {error && (
-              <div className={`text-xs px-3 py-2 rounded-lg ${
-                error.includes('creada') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
-              }`}>
+              <div className="text-xs px-3 py-2 rounded-lg bg-red-50 text-red-600">
                 {error}
               </div>
             )}
 
-            <button type="submit" disabled={loading} className="btn btn-primary w-full justify-center mt-2">
-              {loading ? 'Cargando...' : modo === 'login' ? 'Entrar' : 'Crear cuenta'}
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn btn-primary w-full justify-center mt-2"
+            >
+              {loading ? 'Cargando...' : 'Iniciar sesión'}
             </button>
           </form>
+
+          <div className="mt-4 pt-4 border-t border-gray-100 text-center text-xs text-gray-400">
+            ¿No tienes acceso? Contacta al administrador.
+          </div>
         </div>
       </div>
     </div>
