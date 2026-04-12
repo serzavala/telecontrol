@@ -48,7 +48,7 @@ function addFooter(doc, total) {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
   doc.setTextColor(15, 52, 96)
-  doc.text('TOTAL A COBRAR:', pageW - 65, pageH - 24)
+  doc.text('TOTAL A COBRAR:', pageW - 68, pageH - 24)
   doc.setFontSize(12)
   doc.setTextColor(20, 120, 60)
   doc.text(fmt$(total), pageW - 12, pageH - 24, { align: 'right' })
@@ -129,7 +129,7 @@ export function generarPDFCN({ rows, periodoLabel, diaCobro, getCuadrilla, getPr
 },
     margin: { left: 12, right: 12 },
     tableLineColor: [200, 210, 230],
-    tableLineWidth: 0.3,
+    tableLineWidth: 0,
   })
   addFooter(doc, total)
   doc.save(`corte-cn-${periodoLabel.replace(/\s/g, '-')}.pdf`)
