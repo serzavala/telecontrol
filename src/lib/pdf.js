@@ -100,7 +100,7 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
 }
 
 export function generarPDFCN({ rows, periodoLabel, diaCobro, getCuadrilla, getProyecto }) {
-  const doc = new jsPDF()
+  const doc = new jsPDF({ orientation: 'landscape' })
   const hoy = new Date().toLocaleDateString('es-MX')
   const total = rows.reduce((a, r) => a + Number(r.monto), 0)
   const startY = addHeader(doc, 'CORTE QUINCENAL CN', 'Casos de Negocio — Izzi-Monstel 2026', [
@@ -121,12 +121,12 @@ export function generarPDFCN({ rows, periodoLabel, diaCobro, getCuadrilla, getPr
     headStyles: { fillColor: [15, 52, 96], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
     alternateRowStyles: { fillColor: [240, 245, 255] },
     columnStyles: {
-      0: { cellWidth: 45 },
-      1: { cellWidth: 70 },
-      2: { cellWidth: 45 },
-      3: { cellWidth: 25, halign: 'right', fontStyle: 'bold' },
-      4: { cellWidth: 22, halign: 'center' },
-    },
+  0: { cellWidth: 45 },
+  1: { cellWidth: 70 },
+  2: { cellWidth: 45 },
+  3: { cellWidth: 25, halign: 'right', fontStyle: 'bold' },
+  4: { cellWidth: 22, halign: 'center' },
+   },
     margin: { left: 12, right: 12 },
     tableLineColor: [200, 210, 230],
     tableLineWidth: 0.3,
