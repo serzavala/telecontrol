@@ -1,1 +1,2 @@
-export { Cuadrillas as default } from './Catalogos'
+import { Cuadrillas } from './Catalogos'
+export default Cuadrillas

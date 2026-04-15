@@ -1,1 +1,2 @@
-export { Proyectos as default } from './Catalogos'
+import { Proyectos } from './Catalogos'
+export default Proyectos
