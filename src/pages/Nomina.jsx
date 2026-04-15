@@ -205,7 +205,7 @@ export default function NominaPage() {
             </div>
           </div>
           <div className="form-row c3">
-            <div><label className="label">Días trabajados *</label><input className="input" type="number" min="0" max="7" step="0.5" value={form.dias_trabajados} onChange={setF('dias_trabajados')} required /></div>
+            <div><label className="label">Días trabajados *</label><input className="input" type="number" min="0" max="14" step="0.5" value={form.dias_trabajados} onChange={setF('dias_trabajados')} required /></div>
             <div><label className="label">Sueldo diario (auto)</label><input className="input" readOnly value={sueldoDiario > 0 ? ig.fmt$(sueldoDiario) : ''} placeholder="Automático" /></div>
             <div><label className="label">Sueldo semana (auto)</label><input className="input" readOnly value={sueldoSemana > 0 ? ig.fmt$(sueldoSemana) : ''} placeholder="Calculado" /></div>
           </div>
