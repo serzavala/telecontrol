@@ -13,10 +13,17 @@ import CorteSemanal from './pages/CorteSemanal'
 import CorteCN from './pages/CorteCN'
 import Historial from './pages/Historial'
 import Usuarios from './pages/Usuarios'
+import ResumenFinanciero from './pages/ResumenFinanciero'
+import Ingresos from './pages/Ingresos'
+import Gastos from './pages/Gastos'
+import NominaPage from './pages/Nomina'
+import Prestamos from './pages/Prestamos'
+import CierresSemanales from './pages/CierresSemanales'
+import Empleados from './pages/Empleados'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
-  if (loading) return <div className="flex items-center justify-center h-screen text-gray-400">Cargando...</div>
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'#6B7A99',fontSize:14 }}>Cargando...</div>
   return user ? children : <Navigate to="/login" replace />
 }
 
@@ -37,6 +44,13 @@ function AppRoutes() {
         <Route path="corte-cn" element={<CorteCN />} />
         <Route path="historial" element={<Historial />} />
         <Route path="usuarios" element={<Usuarios />} />
+        <Route path="resumen-financiero" element={<ResumenFinanciero />} />
+        <Route path="ingresos" element={<Ingresos />} />
+        <Route path="gastos" element={<Gastos />} />
+        <Route path="nomina" element={<NominaPage />} />
+        <Route path="prestamos" element={<Prestamos />} />
+        <Route path="cierres" element={<CierresSemanales />} />
+        <Route path="empleados" element={<Empleados />} />
       </Route>
     </Routes>
   )
