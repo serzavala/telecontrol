@@ -1,1 +1,2 @@
-export { Conceptos as default } from './Catalogos'
+import { Conceptos } from './Catalogos'
+export default Conceptos
