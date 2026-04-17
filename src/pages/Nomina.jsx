@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useIG } from '../hooks/useIG'
 import { useDB } from '../hooks/useDB'
 import Modal from '../components/Modal'
+import jsPDF from 'jspdf'
+import 'jspdf-autotable'
 
 export default function NominaPage() {
   const ig = useIG()
@@ -43,6 +45,117 @@ export default function NominaPage() {
   // Agrupar por cuadrilla
   const cuadrillasEnRows = [...new Set(rows.map(r => r.cuadrilla_id))]
 
+  function exportarPDF() {
+    if (!rows.length) { alert('No hay registros para exportar. Aplica un filtro de semana primero.'); return }
+    const doc = new jsPDF({ orientation: 'landscape' })
+    const fechaHoy = new Date().toLocaleDateString('es-MX')
+    const semLabel = filtros.semana ? `Semana ${filtros.semana} — ${filtros.anio}` : `Año ${filtros.anio}`
+
+    // Header NOVUS
+    doc.setFillColor(15, 52, 96)
+    doc.rect(0, 0, 297, 18, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(13)
+    doc.text('NOVUS — Innovación y Futuro', 14, 12)
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Nómina ${semLabel} · Emitido: ${fechaHoy}`, 180, 12)
+
+    let startY = 24
+
+    // Por cada cuadrilla una sección
+    cuadrillasEnRows.forEach((cid, idx) => {
+      const c = db.getCuadrilla(cid)
+      const empleadosCuad = rows.filter(r => r.cuadrilla_id === cid)
+      const subtotalNeto = empleadosCuad.reduce((a, r) => a + Number(r.neto_pagar), 0)
+
+      if (idx > 0) startY += 6
+
+      // Título cuadrilla
+      doc.setFillColor(230, 236, 250)
+      doc.rect(14, startY - 4, 269, 8, 'F')
+      doc.setTextColor(15, 52, 96)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9)
+      doc.text(c.nombre + ` — ${empleadosCuad.length} empleado(s)`, 16, startY + 1)
+
+      const tableData = empleadosCuad.map(r => {
+        const emp = ig.getEmpleado(r.empleado_id)
+        return [
+          emp.numero || '—',
+          emp.nombre || '—',
+          String(r.dias_trabajados),
+          ig.fmt$(r.sueldo_diario),
+          ig.fmt$(r.sueldo_semana),
+          ig.fmt$(r.viaticos),
+          r.anticipo_operativo > 0 ? ig.fmt$(r.anticipo_operativo) : '—',
+          r.descuento_prestamo > 0 ? `-${ig.fmt$(r.descuento_prestamo)}` : '—',
+          ig.fmt$(r.neto_pagar),
+        ]
+      })
+
+      // Fila subtotal
+      tableData.push([
+        '', 'SUBTOTAL', '', '', '', '', '', '',
+        ig.fmt$(subtotalNeto),
+      ])
+
+      doc.autoTable({
+        startY: startY + 5,
+        head: [['N° Emp.', 'Nombre', 'Días', 'S.Diario', 'Sueldo', 'Viáticos', 'Anticipo', 'Desc.Prest.', 'Neto']],
+        body: tableData,
+        styles: { fontSize: 8.5, cellPadding: 2.5, textColor: [40, 40, 40] },
+        headStyles: { fillColor: [15, 52, 96], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+        alternateRowStyles: { fillColor: [245, 248, 255] },
+        bodyStyles: { font: 'helvetica' },
+        didParseCell: (data) => {
+          // Resaltar fila subtotal
+          if (data.row.index === tableData.length - 1) {
+            data.cell.styles.fillColor = [230, 236, 250]
+            data.cell.styles.fontStyle = 'bold'
+            data.cell.styles.textColor = [15, 52, 96]
+          }
+        },
+        columnStyles: {
+          0: { cellWidth: 22 },
+          1: { cellWidth: 50 },
+          2: { cellWidth: 14, halign: 'center' },
+          3: { cellWidth: 24, halign: 'right' },
+          4: { cellWidth: 28, halign: 'right' },
+          5: { cellWidth: 24, halign: 'right' },
+          6: { cellWidth: 24, halign: 'right' },
+          7: { cellWidth: 26, halign: 'right' },
+          8: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
+        },
+        margin: { left: 14, right: 14 },
+      })
+
+      startY = doc.lastAutoTable.finalY + 4
+    })
+
+    // Total general
+    const pageW = doc.internal.pageSize.getWidth()
+    const pageH = doc.internal.pageSize.getHeight()
+    doc.setDrawColor(15, 52, 96)
+    doc.setLineWidth(0.6)
+    doc.line(14, pageH - 28, pageW - 14, pageH - 28)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(15, 52, 96)
+    doc.text('TOTAL NÓMINA:', pageW - 70, pageH - 20)
+    doc.setFontSize(13)
+    doc.setTextColor(20, 120, 60)
+    doc.text(ig.fmt$(totalNeto), pageW - 14, pageH - 20, { align: 'right' })
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(150, 150, 150)
+    doc.text(`${rows.length} empleados · ${semLabel}`, 14, pageH - 20)
+    doc.text('NOVUS — Innovación y Futuro', pageW - 14, pageH - 12, { align: 'right' })
+
+    doc.save(`nomina-sem${filtros.semana || 'todas'}-${filtros.anio}.pdf`)
+  }
+
   async function handleSave(e) {
     e.preventDefault()
     if (!form.semana || !form.empleado_id || !form.dias_trabajados) { alert('Completa los campos obligatorios.'); return }
@@ -69,7 +182,12 @@ export default function NominaPage() {
     <div>
       <div className="page-header">
         <div><h2>Nómina semanal</h2><div className="page-header-sub">Pagos por semana organizados por cuadrilla</div></div>
-        <button className="btn btn-primary" onClick={() => setModal(true)}>+ Registrar pago</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn" style={{ background: '#0F3460', color: '#fff', border: 'none' }} onClick={exportarPDF}>
+            Exportar PDF
+          </button>
+          <button className="btn btn-primary" onClick={() => setModal(true)}>+ Registrar pago</button>
+        </div>
       </div>
 
       <div className="card mb-4">
@@ -205,7 +323,7 @@ export default function NominaPage() {
             </div>
           </div>
           <div className="form-row c3">
-            <div><label className="label">Días trabajados *</label><input className="input" type="number" min="0" max="14" step="0.5" value={form.dias_trabajados} onChange={setF('dias_trabajados')} required /></div>
+            <div><label className="label">Días trabajados *</label><input className="input" type="number" min="0" max="7" step="0.5" value={form.dias_trabajados} onChange={setF('dias_trabajados')} required /></div>
             <div><label className="label">Sueldo diario (auto)</label><input className="input" readOnly value={sueldoDiario > 0 ? ig.fmt$(sueldoDiario) : ''} placeholder="Automático" /></div>
             <div><label className="label">Sueldo semana (auto)</label><input className="input" readOnly value={sueldoSemana > 0 ? ig.fmt$(sueldoSemana) : ''} placeholder="Calculado" /></div>
           </div>
@@ -249,4 +367,3 @@ export default function NominaPage() {
     </div>
   )
 }
-
