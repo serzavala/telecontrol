@@ -27,6 +27,7 @@ const navItems = [
   { divider: true },
   { section: 'Admin' },
   { to: '/usuarios', label: 'Usuarios' },
+  { to: '/auditoria', label: 'Auditoría' },
 ]
 
 export default function Layout() {
@@ -79,4 +80,3 @@ export default function Layout() {
     </div>
   )
 }
-

@@ -13,6 +13,7 @@ import CorteSemanal from './pages/CorteSemanal'
 import CorteCN from './pages/CorteCN'
 import Historial from './pages/Historial'
 import Usuarios from './pages/Usuarios'
+import Auditoria from './pages/Auditoria'
 import ResumenFinanciero from './pages/ResumenFinanciero'
 import Ingresos from './pages/Ingresos'
 import Gastos from './pages/Gastos'
@@ -44,6 +45,7 @@ function AppRoutes() {
         <Route path="corte-cn" element={<CorteCN />} />
         <Route path="historial" element={<Historial />} />
         <Route path="usuarios" element={<Usuarios />} />
+        <Route path="auditoria" element={<Auditoria />} />
         <Route path="resumen-financiero" element={<ResumenFinanciero />} />
         <Route path="ingresos" element={<Ingresos />} />
         <Route path="gastos" element={<Gastos />} />
