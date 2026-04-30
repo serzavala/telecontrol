@@ -16,7 +16,6 @@ export function useDB() {
     if (!user) { setLoading(false); return }
     setLoading(true)
     try {
-      // SIN filtro por user_id — todos los usuarios ven los mismos datos
       const [cua, pro, con, prod, cn, cor] = await Promise.all([
         supabase.from('cuadrillas').select('*').order('nombre'),
         supabase.from('proyectos').select('*').order('nombre'),
@@ -40,6 +39,7 @@ export function useDB() {
 
   useEffect(() => { load() }, [load])
 
+  const fmt$ = (n) => '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const getCuadrilla = (id) => cuadrillas.find(c => c.id === id) || { nombre: '—' }
   const getProyecto = (id) => proyectos.find(p => p.id === id) || { nombre: '—', ciudad: '—' }
   const getConcepto = (id) => conceptos.find(c => c.id === id) || { nombre: '—', unidad: '', num: '' }
@@ -59,7 +59,6 @@ export function useDB() {
     if (!error) load()
     return { error }
   }
-
   async function addProyecto(data) {
     const { error } = await supabase.from('proyectos').insert({ ...data, user_id: user.id })
     if (!error) load()
@@ -75,7 +74,6 @@ export function useDB() {
     if (!error) load()
     return { error }
   }
-
   async function addConcepto(data) {
     const { error } = await supabase.from('conceptos').insert({ ...data, user_id: user.id })
     if (!error) load()
@@ -91,7 +89,6 @@ export function useDB() {
     if (!error) load()
     return { error }
   }
-
   async function addProduccion(data) {
     const { error } = await supabase.from('produccion').insert({ ...data, user_id: user.id })
     if (!error) load()
@@ -107,7 +104,6 @@ export function useDB() {
     if (!error) load()
     return { error }
   }
-
   async function addRegistroCN(data) {
     const { error } = await supabase.from('registros_cn').insert({ ...data, user_id: user.id })
     if (!error) load()
@@ -123,7 +119,6 @@ export function useDB() {
     if (!error) load()
     return { error }
   }
-
   async function addCorte(data) {
     const { error } = await supabase.from('cortes').insert({ ...data, user_id: user.id })
     if (!error) load()
@@ -142,7 +137,7 @@ export function useDB() {
 
   return {
     cuadrillas, proyectos, conceptos, produccion, registrosCN, cortes,
-    loading, reload: load,
+    loading, reload: load, fmt$,
     getCuadrilla, getProyecto, getConcepto,
     addCuadrilla, updateCuadrilla, deleteCuadrilla,
     addProyecto, updateProyecto, deleteProyecto,
