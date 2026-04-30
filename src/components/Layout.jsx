@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import Asistente from './Asistente'
 
 const navItems = [
   { section: 'Producción' },
@@ -77,6 +78,7 @@ export default function Layout() {
       <div className="flex-1 overflow-y-auto">
         <div className="p-6"><Outlet /></div>
       </div>
+      <Asistente />
     </div>
   )
 }
