@@ -13,31 +13,44 @@ export function useDB() {
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    if (!user) return
+    if (!user) { setLoading(false); return }
     setLoading(true)
-    const uid = user.id
-    const [c, pr, cn, prod, rcn, co] = await Promise.all([
-      supabase.from('cuadrillas').select('*').eq('user_id', uid).order('nombre'),
-      supabase.from('proyectos').select('*').eq('user_id', uid).order('nombre'),
-      supabase.from('conceptos').select('*').eq('user_id', uid).order('num'),
-      supabase.from('produccion').select('*').eq('user_id', uid).order('fecha', { ascending: false }),
-      supabase.from('registros_cn').select('*').eq('user_id', uid).order('mes', { ascending: false }),
-      supabase.from('cortes').select('*').eq('user_id', uid).order('fecha_corte', { ascending: false }),
-    ])
-    setCuadrillas(c.data || [])
-    setProyectos(pr.data || [])
-    setConceptos(cn.data || [])
-    setProduccion(prod.data || [])
-    setRegistrosCN(rcn.data || [])
-    setCortes(co.data || [])
-    setLoading(false)
+    try {
+      // SIN filtro por user_id — todos los usuarios ven los mismos datos
+      const [cua, pro, con, prod, cn, cor] = await Promise.all([
+        supabase.from('cuadrillas').select('*').order('nombre'),
+        supabase.from('proyectos').select('*').order('nombre'),
+        supabase.from('conceptos').select('*').order('num'),
+        supabase.from('produccion').select('*').order('fecha', { ascending: false }),
+        supabase.from('registros_cn').select('*').order('mes', { ascending: false }),
+        supabase.from('cortes').select('*').order('fecha_corte', { ascending: false }),
+      ])
+      setCuadrillas(cua.data || [])
+      setProyectos(pro.data || [])
+      setConceptos(con.data || [])
+      setProduccion(prod.data || [])
+      setRegistrosCN(cn.data || [])
+      setCortes(cor.data || [])
+    } catch (err) {
+      console.error('useDB error:', err)
+    } finally {
+      setLoading(false)
+    }
   }, [user])
 
   useEffect(() => { load() }, [load])
 
-  // CUADRILLAS
+  const getCuadrilla = (id) => cuadrillas.find(c => c.id === id) || { nombre: '—' }
+  const getProyecto = (id) => proyectos.find(p => p.id === id) || { nombre: '—', ciudad: '—' }
+  const getConcepto = (id) => conceptos.find(c => c.id === id) || { nombre: '—', unidad: '', num: '' }
+
   async function addCuadrilla(data) {
     const { error } = await supabase.from('cuadrillas').insert({ ...data, user_id: user.id })
+    if (!error) load()
+    return { error }
+  }
+  async function updateCuadrilla(id, data) {
+    const { error } = await supabase.from('cuadrillas').update(data).eq('id', id)
     if (!error) load()
     return { error }
   }
@@ -47,9 +60,13 @@ export function useDB() {
     return { error }
   }
 
-  // PROYECTOS
   async function addProyecto(data) {
     const { error } = await supabase.from('proyectos').insert({ ...data, user_id: user.id })
+    if (!error) load()
+    return { error }
+  }
+  async function updateProyecto(id, data) {
+    const { error } = await supabase.from('proyectos').update(data).eq('id', id)
     if (!error) load()
     return { error }
   }
@@ -59,9 +76,13 @@ export function useDB() {
     return { error }
   }
 
-  // CONCEPTOS
   async function addConcepto(data) {
     const { error } = await supabase.from('conceptos').insert({ ...data, user_id: user.id })
+    if (!error) load()
+    return { error }
+  }
+  async function updateConcepto(id, data) {
+    const { error } = await supabase.from('conceptos').update(data).eq('id', id)
     if (!error) load()
     return { error }
   }
@@ -71,9 +92,13 @@ export function useDB() {
     return { error }
   }
 
-  // PRODUCCION
   async function addProduccion(data) {
     const { error } = await supabase.from('produccion').insert({ ...data, user_id: user.id })
+    if (!error) load()
+    return { error }
+  }
+  async function updateProduccion(id, data) {
+    const { error } = await supabase.from('produccion').update(data).eq('id', id)
     if (!error) load()
     return { error }
   }
@@ -83,14 +108,13 @@ export function useDB() {
     return { error }
   }
 
-  // REGISTROS CN
   async function addRegistroCN(data) {
     const { error } = await supabase.from('registros_cn').insert({ ...data, user_id: user.id })
     if (!error) load()
     return { error }
   }
-  async function updateRegistroCNEstado(id, estado) {
-    const { error } = await supabase.from('registros_cn').update({ estado }).eq('id', id)
+  async function updateRegistroCN(id, data) {
+    const { error } = await supabase.from('registros_cn').update(data).eq('id', id)
     if (!error) load()
     return { error }
   }
@@ -100,19 +124,13 @@ export function useDB() {
     return { error }
   }
 
-  // CORTES
   async function addCorte(data) {
     const { error } = await supabase.from('cortes').insert({ ...data, user_id: user.id })
     if (!error) load()
     return { error }
   }
-  async function togglePagoCorte(id, estadoActual) {
-    const nuevoEstado = estadoActual === 'Pagado' ? 'Pendiente' : 'Pagado'
-    const update = {
-      estado_pago: nuevoEstado,
-      fecha_pago: nuevoEstado === 'Pagado' ? new Date().toISOString().split('T')[0] : null
-    }
-    const { error } = await supabase.from('cortes').update(update).eq('id', id)
+  async function updateCorte(id, data) {
+    const { error } = await supabase.from('cortes').update(data).eq('id', id)
     if (!error) load()
     return { error }
   }
@@ -122,20 +140,15 @@ export function useDB() {
     return { error }
   }
 
-  // Helpers
-  function getCuadrilla(id) { return cuadrillas.find(c => c.id === id) || { nombre: '—' } }
-  function getProyecto(id) { return proyectos.find(p => p.id === id) || { nombre: '—', ciudad: '—' } }
-  function getConcepto(id) { return conceptos.find(c => c.id === id) || { nombre: '—', unidad: '—', precio: 0 } }
-  function fmt$(n) { return '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
-
   return {
-    cuadrillas, proyectos, conceptos, produccion, registrosCN, cortes, loading, reload: load,
-    addCuadrilla, deleteCuadrilla,
-    addProyecto, deleteProyecto,
-    addConcepto, deleteConcepto,
-    addProduccion, deleteProduccion,
-    addRegistroCN, updateRegistroCNEstado, deleteRegistroCN,
-    addCorte, togglePagoCorte, deleteCorte,
-    getCuadrilla, getProyecto, getConcepto, fmt$
+    cuadrillas, proyectos, conceptos, produccion, registrosCN, cortes,
+    loading, reload: load,
+    getCuadrilla, getProyecto, getConcepto,
+    addCuadrilla, updateCuadrilla, deleteCuadrilla,
+    addProyecto, updateProyecto, deleteProyecto,
+    addConcepto, updateConcepto, deleteConcepto,
+    addProduccion, updateProduccion, deleteProduccion,
+    addRegistroCN, updateRegistroCN, deleteRegistroCN,
+    addCorte, updateCorte, deleteCorte,
   }
 }

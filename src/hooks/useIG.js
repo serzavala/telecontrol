@@ -19,15 +19,15 @@ export function useIG() {
     setLoading(true)
     setError(null)
     try {
-      const uid = user.id
+      // SIN filtro por user_id — todos los usuarios ven los mismos datos
       const [emp, veh, ing, gas, nom, pre, cie] = await Promise.all([
-        supabase.from('empleados').select('*').eq('user_id', uid).eq('activo', true).order('numero'),
-        supabase.from('vehiculos').select('*').eq('user_id', uid).order('placa'),
-        supabase.from('ingresos').select('*').eq('user_id', uid).order('fecha', { ascending: false }),
-        supabase.from('gastos').select('*').eq('user_id', uid).order('fecha', { ascending: false }),
-        supabase.from('nomina').select('*').eq('user_id', uid).order('semana', { ascending: false }),
-        supabase.from('prestamos').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
-        supabase.from('cierres_semanales').select('*').eq('user_id', uid).order('anio', { ascending: false }).order('semana', { ascending: false }),
+        supabase.from('empleados').select('*').eq('activo', true).order('numero'),
+        supabase.from('vehiculos').select('*').order('placa'),
+        supabase.from('ingresos').select('*').order('fecha', { ascending: false }),
+        supabase.from('gastos').select('*').order('fecha', { ascending: false }),
+        supabase.from('nomina').select('*').order('semana', { ascending: false }),
+        supabase.from('prestamos').select('*').order('created_at', { ascending: false }),
+        supabase.from('cierres_semanales').select('*').order('anio', { ascending: false }).order('semana', { ascending: false }),
       ])
       if (emp.error) throw emp.error
       setEmpleados(emp.data || [])
