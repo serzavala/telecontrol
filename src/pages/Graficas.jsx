@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { Chart, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js'
 import { useDB } from '../hooks/useDB'
 import { getSemanas } from '../lib/fechas'
 
-Chart.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
+import { Chart, CategoryScale, LinearScale, BarElement, BarController, Tooltip, Legend } from 'chart.js'
+Chart.register(CategoryScale, LinearScale, BarElement, BarController, Tooltip, Legend)
 
 const COLORES = ['#378ADD','#1D9E75','#BA7517','#D85A30','#7F77DD','#D4537E','#639922','#E24B4A']
 
