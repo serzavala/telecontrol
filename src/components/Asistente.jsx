@@ -2,12 +2,12 @@ import { useState, useRef, useEffect } from 'react'
 import { useDB } from '../hooks/useDB'
 import { useIG } from '../hooks/useIG'
 
-export default function Asistente() {
+function AsistenteInner() {
   const db = useDB()
   const ig = useIG()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: '¡Hola! Soy el asistente de TeleControl. Puedo ayudarte a analizar tu producción, nómina, gastos e ingresos, o explicarte cómo usar cualquier módulo. ¿En qué te ayudo?' }
+    { role: 'assistant', content: 'Hola! Soy el asistente de TeleControl. Puedo ayudarte a analizar tu produccion, nomina, gastos e ingresos, o explicarte como usar cualquier modulo. En que te ayudo?' }
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -17,15 +17,19 @@ export default function Asistente() {
     if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, open])
 
-  function buildContext() {
-    const totalProd = db.produccion.reduce((a, r) => a + Number(r.total || 0), 0)
-    const totalNomina = ig.nomina.reduce((a, r) => a + Number(r.neto_pagar || 0), 0)
-    const totalGastos = ig.gastos.reduce((a, r) => a + Number(r.monto || 0), 0)
-    const totalIngresos = ig.ingresos.reduce((a, r) => a + Number(r.monto || 0), 0)
-    const utilidad = totalIngresos - totalNomina - totalGastos
-    const fmt = n => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 })
+  function fmt(n) {
+    return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })
+  }
 
-    return `DATOS ACTUALES:
+  function buildContext() {
+    try {
+      const totalProd = db.produccion.reduce((a, r) => a + Number(r.total || 0), 0)
+      const totalNomina = ig.nomina.reduce((a, r) => a + Number(r.neto_pagar || 0), 0)
+      const totalGastos = ig.gastos.reduce((a, r) => a + Number(r.monto || 0), 0)
+      const totalIngresos = ig.ingresos.reduce((a, r) => a + Number(r.monto || 0), 0)
+      const utilidad = totalIngresos - totalNomina - totalGastos
+
+      return `DATOS ACTUALES:
 Produccion: ${db.produccion.length} registros | Total: ${fmt(totalProd)}
 Cuadrillas: ${db.cuadrillas.map(c => c.nombre).join(', ')}
 Proyectos: ${db.proyectos.map(p => p.nombre).join(', ')}
@@ -33,8 +37,11 @@ CN pendientes: ${db.registrosCN.filter(r => r.estado === 'Pendiente').length}
 Empleados: ${ig.empleados.length} (${ig.empleados.filter(e => (e.tipo_pago||'Semanal')==='Semanal').length} semanales, ${ig.empleados.filter(e => e.tipo_pago==='Quincenal').length} quincenales)
 Nomina total: ${fmt(totalNomina)} | Gastos total: ${fmt(totalGastos)}
 Ingresos total: ${fmt(totalIngresos)} | Utilidad neta: ${fmt(utilidad)}
-Prestamos activos: ${ig.prestamos.filter(p => p.estado === 'Activo').length} | Saldo: ${fmt(ig.prestamos.filter(p => p.estado === 'Activo').reduce((a, p) => a + Number(p.saldo), 0))}
-Cortes pendientes pago: ${db.cortes.filter(c => c.estado === 'Pendiente').length}`
+Prestamos activos: ${ig.prestamos.filter(p => p.estado === 'Activo').length}
+Cortes pendientes: ${db.cortes.filter(c => c.estado === 'Pendiente').length}`
+    } catch (e) {
+      return 'Contexto no disponible'
+    }
   }
 
   async function sendMessage() {
@@ -44,7 +51,7 @@ Cortes pendientes pago: ${db.cortes.filter(c => c.estado === 'Pendiente').length
     setInput('')
     setLoading(true)
     try {
-      const apiMessages = [...messages, userMsg].filter((m, i) => i > 0 || m.role !== 'assistant')
+      const apiMessages = [...messages, userMsg].slice(1)
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -54,7 +61,7 @@ Cortes pendientes pago: ${db.cortes.filter(c => c.estado === 'Pendiente').length
       if (data.error) throw new Error(data.error)
       setMessages(prev => [...prev, { role: 'assistant', content: data.content }])
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }])
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Error: ' + err.message }])
     } finally {
       setLoading(false)
     }
@@ -65,10 +72,10 @@ Cortes pendientes pago: ${db.cortes.filter(c => c.estado === 'Pendiente').length
   }
 
   const sugerencias = [
-    '¿Cuál es la utilidad neta acumulada?',
-    '¿Cómo registro un avance de producción?',
-    '¿Cuántos empleados tengo activos?',
-    '¿Cómo genero un corte semanal?',
+    'Cual es la utilidad neta acumulada?',
+    'Como registro un avance de produccion?',
+    'Cuantos empleados tengo activos?',
+    'Como genero un corte semanal?',
   ]
 
   return (
@@ -97,7 +104,7 @@ Cortes pendientes pago: ${db.cortes.filter(c => c.estado === 'Pendiente').length
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#F5A623', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, color: '#0F3460', flexShrink: 0 }}>N</div>
             <div>
               <div style={{ color: '#fff', fontWeight: 500, fontSize: 14 }}>Asistente TeleControl</div>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Powered by Claude · NOVUS</div>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Powered by Claude - NOVUS</div>
             </div>
             <div style={{ marginLeft: 'auto', width: 8, height: 8, borderRadius: '50%', background: '#2ECC71' }} />
           </div>
@@ -118,7 +125,7 @@ Cortes pendientes pago: ${db.cortes.filter(c => c.estado === 'Pendiente').length
               <div style={{ display: 'flex' }}>
                 <div style={{ background: '#F4F6FB', padding: '10px 14px', borderRadius: '14px 14px 14px 4px', display: 'flex', gap: 4 }}>
                   {[0,1,2].map(i => (
-                    <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: '#0F3460', animation: `pulse 1s ${i*0.2}s infinite` }} />
+                    <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: '#0F3460', animation: 'pulse 1s ' + (i*0.2) + 's infinite' }} />
                   ))}
                 </div>
               </div>
@@ -152,9 +159,13 @@ Cortes pendientes pago: ${db.cortes.filter(c => c.estado === 'Pendiente').length
               </svg>
             </button>
           </div>
-          <style>{`@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}`}</style>
+          <style>{'@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}'}</style>
         </div>
       )}
     </>
   )
+}
+
+export default function Asistente() {
+  return <AsistenteInner />
 }
