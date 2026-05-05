@@ -1,5 +1,9 @@
 
 /* ===================== TEMA OSCURO ===================== */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --tc-bg: #F4F6FB;
   --tc-surface: #ffffff;
