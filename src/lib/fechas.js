@@ -1,16 +1,21 @@
-// Devuelve el lunes de la semana actual + offset
+// Semana de producción: VIERNES a JUEVES
+// Devuelve el viernes de la semana actual + offset
 export function getSemana(offset = 0) {
   const hoy = new Date()
-  const dow = hoy.getDay() === 0 ? 6 : hoy.getDay() - 1
-  const lunes = new Date(hoy)
-  lunes.setDate(hoy.getDate() - dow + offset * 7)
-  const dom = new Date(lunes)
-  dom.setDate(lunes.getDate() + 6)
+  // getDay(): 0=dom, 1=lun, 2=mar, 3=mie, 4=jue, 5=vie, 6=sab
+  const dow = hoy.getDay()
+  // Días desde el viernes más reciente
+  // Si hoy es vie(5)=0, sab(6)=1, dom(0)=2, lun(1)=3, mar(2)=4, mie(3)=5, jue(4)=6
+  const diasDesdeViernes = dow === 5 ? 0 : dow === 6 ? 1 : dow + 2
+  const viernes = new Date(hoy)
+  viernes.setDate(hoy.getDate() - diasDesdeViernes + offset * 7)
+  const jueves = new Date(viernes)
+  jueves.setDate(viernes.getDate() + 6)
   return {
-    ini: lunes.toISOString().split('T')[0],
-    fin: dom.toISOString().split('T')[0],
-    lunes,
-    dom,
+    ini: viernes.toISOString().split('T')[0],
+    fin: jueves.toISOString().split('T')[0],
+    lunes: viernes, // mantenemos el nombre para compatibilidad
+    dom: jueves,
   }
 }
 
@@ -23,22 +28,24 @@ export function fmtSemanaLabel(s) {
   )
 }
 
-// Array de N semanas hacia atrás desde la semana actual
+// Array de N semanas hacia atrás desde la semana actual (viernes a jueves)
 export function getSemanas(n) {
   const hoy = new Date()
-  const dow = hoy.getDay() === 0 ? 6 : hoy.getDay() - 1
-  const lunesActual = new Date(hoy)
-  lunesActual.setDate(hoy.getDate() - dow)
+  const dow = hoy.getDay()
+  const diasDesdeViernes = dow === 5 ? 0 : dow === 6 ? 1 : dow + 2
+  const viernesActual = new Date(hoy)
+  viernesActual.setDate(hoy.getDate() - diasDesdeViernes)
   const sems = []
   for (let i = n - 1; i >= 0; i--) {
-    const lunes = new Date(lunesActual)
-    lunes.setDate(lunesActual.getDate() - i * 7)
-    const dom = new Date(lunes)
-    dom.setDate(lunes.getDate() + 6)
+    const viernes = new Date(viernesActual)
+    viernes.setDate(viernesActual.getDate() - i * 7)
+    const jueves = new Date(viernes)
+    jueves.setDate(viernes.getDate() + 6)
     sems.push({
-      ini: lunes.toISOString().split('T')[0],
-      fin: dom.toISOString().split('T')[0],
-      label: lunes.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+      ini: viernes.toISOString().split('T')[0],
+      fin: jueves.toISOString().split('T')[0],
+      label: viernes.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) +
+             ' – ' + jueves.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
     })
   }
   return sems
@@ -50,7 +57,6 @@ export function getInfoCortesCN() {
   const d = hoy.getDate()
   const ult = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate()
   const pen = ult - 1
-
   if (d === 14) return { tipo: 'warn', msg: 'Hoy es día 14 — corte 1ª quincena CN. Genera el PDF hoy.' }
   if (d === 15) return { tipo: 'success', msg: 'Hoy es día 15 — día de cobro 1ª quincena CN.' }
   if (d === pen) return { tipo: 'warn', msg: `Hoy es día ${d} — corte 2ª quincena CN. Genera el PDF hoy.` }
