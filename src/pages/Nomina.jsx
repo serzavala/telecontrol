@@ -13,6 +13,9 @@ export default function NominaPage() {
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState({ semana: '', anio: hoy.getFullYear(), cuadrilla_id: '', empleado_id: '', dias_trabajados: '6', sueldo_diario: '', viaticos: '0', anticipo_operativo: '0', descuento_prestamo: '0', fecha_pago: '' })
   const [saving, setSaving] = useState(false)
+  const [autoModal, setAutoModal] = useState(false)
+  const [autoForm, setAutoForm] = useState({ semana: '', anio: hoy.getFullYear(), cuadrillas: [], viaticos_modo: 'empleado', viaticos_general: '0' })
+  const [autoSaving, setAutoSaving] = useState(false)
   const setF = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
   const setFilt = k => e => setFiltros(f => ({ ...f, [k]: e.target.value }))
 
@@ -177,12 +180,49 @@ export default function NominaPage() {
     setModal(false)
     setForm({ semana: '', anio: hoy.getFullYear(), cuadrilla_id: '', empleado_id: '', dias_trabajados: '6', sueldo_diario: '', viaticos: '0', anticipo_operativo: '0', descuento_prestamo: '0', fecha_pago: '' })
   }
-
+async function generarNominaAutomatica() {
+  if (!autoForm.semana) { alert('Selecciona la semana.'); return }
+  if (!autoForm.cuadrillas.length) { alert('Selecciona al menos una cuadrilla.'); return }
+  setAutoSaving(true)
+  const empleadosSeleccionados = ig.empleados.filter(e => autoForm.cuadrillas.includes(e.cuadrilla_id))
+  const registros = empleadosSeleccionados.map(e => {
+    const diasTrabajados = 6
+    const sueldoDiario = Number(e.sueldo_diario)
+    const sueldoSemana = sueldoDiario * diasTrabajados
+    const viaticos = autoForm.viaticos_modo === 'empleado'
+      ? Number(e.viaticos_default || 0)
+      : parseFloat(autoForm.viaticos_general || 0)
+    const neto = sueldoSemana + viaticos
+    return {
+      semana: parseInt(autoForm.semana),
+      anio: parseInt(autoForm.anio),
+      cuadrilla_id: e.cuadrilla_id,
+      empleado_id: e.id,
+      dias_trabajados: diasTrabajados,
+      sueldo_diario: sueldoDiario,
+      sueldo_semana: sueldoSemana,
+      viaticos,
+      anticipo_operativo: 0,
+      descuento_prestamo: 0,
+      neto_pagar: neto,
+      fecha_pago: null,
+    }
+  })
+  let exitosos = 0
+  for (const r of registros) {
+    const { error } = await ig.addNomina(r)
+    if (!error) exitosos++
+  }
+  setAutoSaving(false)
+  setAutoModal(false)
+  alert(`Nómina generada: ${exitosos} de ${registros.length} registros creados correctamente.`)
+}
   return (
     <div>
       <div className="page-header">
         <div><h2>Nómina semanal</h2><div className="page-header-sub">Pagos por semana organizados por cuadrilla</div></div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-gold" onClick={() => setAutoModal(true)}>⚡ Generar nómina</button>
           <button className="btn" style={{ background: '#0F3460', color: '#fff', border: 'none' }} onClick={exportarPDF}>
             Exportar PDF
           </button>
@@ -370,6 +410,68 @@ export default function NominaPage() {
           </div>
         </form>
       </Modal>
+      <Modal open={autoModal} onClose={() => setAutoModal(false)} title="Generar nómina automática">
+  <div className="space-y-3">
+    <div style={{ background: '#E8F0FB', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#1A4FA0' }}>
+      Se generarán 6 días para todos los empleados de las cuadrillas seleccionadas. Podrás editar individualmente después.
     </div>
+    <div className="form-row c2">
+      <div><label className="label">Semana # *</label>
+        <input className="input" type="number" min="1" max="52" placeholder="19" value={autoForm.semana}
+          onChange={e => setAutoForm(f => ({ ...f, semana: e.target.value }))} />
+      </div>
+      <div><label className="label">Año</label>
+        <input className="input" type="number" value={autoForm.anio}
+          onChange={e => setAutoForm(f => ({ ...f, anio: e.target.value }))} />
+      </div>
+    </div>
+    <div>
+      <label className="label">Cuadrillas a incluir *</label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+        {db.cuadrillas.map(c => (
+          <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+            <input type="checkbox" style={{ width: 'auto' }}
+              checked={autoForm.cuadrillas.includes(c.id)}
+              onChange={e => setAutoForm(f => ({
+                ...f,
+                cuadrillas: e.target.checked
+                  ? [...f.cuadrillas, c.id]
+                  : f.cuadrillas.filter(id => id !== c.id)
+              }))} />
+            {c.nombre} ({ig.empleados.filter(e => e.cuadrilla_id === c.id).length} empleados)
+          </label>
+        ))}
+      </div>
+    </div>
+    <div>
+      <label className="label">Viáticos</label>
+      <select className="input" value={autoForm.viaticos_modo}
+        onChange={e => setAutoForm(f => ({ ...f, viaticos_modo: e.target.value }))}>
+        <option value="empleado">Usar viático configurado por empleado</option>
+        <option value="general">Mismo monto para todos</option>
+        <option value="cero">Sin viáticos (agregar después)</option>
+      </select>
+    </div>
+    {autoForm.viaticos_modo === 'general' && (
+      <div><label className="label">Monto viáticos ($) para todos</label>
+        <input className="input" type="number" min="0" step="100" value={autoForm.viaticos_general}
+          onChange={e => setAutoForm(f => ({ ...f, viaticos_general: e.target.value }))} />
+      </div>
+    )}
+    <div style={{ background: '#F4F6FB', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#6B7A99' }}>
+      Empleados que se incluirán: <strong style={{ color: '#0F3460' }}>
+        {ig.empleados.filter(e => autoForm.cuadrillas.includes(e.cuadrilla_id)).length}
+      </strong>
+    </div>
+    <div className="flex justify-end gap-2 pt-1">
+      <button className="btn btn-outline" onClick={() => setAutoModal(false)}>Cancelar</button>
+      <button className="btn btn-primary" onClick={generarNominaAutomatica} disabled={autoSaving}>
+        {autoSaving ? 'Generando...' : 'Generar nómina'}
+      </button>
+    </div>
+  </div>
+</Modal>
+    </div>
+    
   )
 }
