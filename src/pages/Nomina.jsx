@@ -189,6 +189,12 @@ export default function NominaPage() {
           <button className="btn btn-primary" onClick={() => setModal(true)}>+ Registrar pago</button>
         </div>
       </div>
+      <div style={{ background: '#0F3460', color: '#fff', borderRadius: 10, padding: '8px 18px', fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
+        <span style={{ color: '#F5A623', fontSize: 22, fontWeight: 700 }}>
+          {Math.ceil((new Date() - new Date(new Date().getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000))}
+        </span>
+        <span>Semana actual del año · {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+      </div>
 
       <div className="card mb-4">
         <div className="form-row c3" style={{ marginBottom: 0 }}>
