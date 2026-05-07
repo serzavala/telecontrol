@@ -4,12 +4,11 @@ import { useDB } from '../hooks/useDB'
 import Modal from '../components/Modal'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
-import { getSemanas } from '../lib/fechas'
+
 export default function NominaPage() {
   const ig = useIG()
   const db = useDB()
   const hoy = new Date()
-  const semanasAnio = getSemanas(52)
   const [filtros, setFiltros] = useState({ semana: '', anio: hoy.getFullYear(), cuadrilla_id: '' })
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState({ semana: '', anio: hoy.getFullYear(), cuadrilla_id: '', empleado_id: '', dias_trabajados: '6', sueldo_diario: '', viaticos: '0', anticipo_operativo: '0', descuento_prestamo: '0', fecha_pago: '' })
@@ -193,22 +192,8 @@ export default function NominaPage() {
 
       <div className="card mb-4">
         <div className="form-row c3" style={{ marginBottom: 0 }}>
-          <div className="form-row" style={{ gridColumn: 'span 2', marginBottom: 0 }}>
-  <div>
-    <label className="label">Semana del año</label>
-    <select className="input" value={filtros.semana} onChange={e => {
-      const sel = semanasAnio.find((_, i) => String(i + 1) === e.target.value)
-      setFiltros(f => ({ ...f, semana: e.target.value }))
-    }}>
-      <option value="">Todas las semanas</option>
-      {semanasAnio.map((s, i) => (
-        <option key={i} value={String(i + 1)}>
-          Sem {i + 1} — {s.label}
-        </option>
-      ))}
-    </select>
-  </div>
-</div>
+          <div><label className="label">Semana</label><input className="input" type="number" placeholder="Todas" value={filtros.semana} onChange={setFilt('semana')} /></div>
+          <div><label className="label">Año</label><input className="input" type="number" value={filtros.anio} onChange={setFilt('anio')} /></div>
           <div><label className="label">Cuadrilla</label>
             <select className="input" value={filtros.cuadrilla_id} onChange={setFilt('cuadrilla_id')}>
               <option value="">Todas</option>
