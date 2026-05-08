@@ -79,20 +79,17 @@ export function getPeriodoCN(quincena, mes, anio) {
 // Calcula el offset necesario para que getSemana(offset) caiga en la semana ISO `numSemana`
 // del año en curso. Útil para saltar directo a una semana por número.
 export function getOffsetDesdeSemana(numSemana) {
-  // Busca el offset donde el jueves de cierre cae en la semana ISO buscada
-  // Busca en un rango de -60 a +60 semanas
-  for (let o = -60; o <= 60; o++) {
+  // Busca primero cerca del presente (año actual)
+  for (let o = -30; o <= 30; o++) {
     const s = getSemana(o)
     const semFin = getSemanaISO(s.fin)
-    if (semFin === numSemana) return o
+    const anioFin = new Date(s.fin).getFullYear()
+    if (semFin === numSemana && anioFin === new Date().getFullYear()) return o
+  }
+  // Fallback sin filtro de año
+  for (let o = -30; o <= 30; o++) {
+    const s = getSemana(o)
+    if (getSemanaISO(s.fin) === numSemana) return o
   }
   return 0
-}
-export function getSemanaISO(fecha) {
-  const date = typeof fecha === 'string' ? new Date(fecha + 'T12:00:00') : fecha
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-  const dayNum = d.getUTCDay() || 7
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7)
 }
