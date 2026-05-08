@@ -13,7 +13,7 @@ export default function Produccion() {
   const [saving, setSaving] = useState(false)
 
   const sem = getSemana(offset)
-  const numSemana = getSemanaISO(sem.ini) // semana ISO del viernes de inicio
+  const numSemana = getSemanaISO(sem.fin) // semana ISO del jueves de corte
   const cuadsSem = db.cuadrillas.filter(c => c.esquema === 'Semanal' || c.esquema === 'Ambas')
   const proysSem = db.proyectos.filter(p => p.tipo === 'Semanal')
 
