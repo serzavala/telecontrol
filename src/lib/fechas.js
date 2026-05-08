@@ -76,6 +76,15 @@ export function getPeriodoCN(quincena, mes, anio) {
     : `16 al ${ult} de ${anio}-${String(mes).padStart(2, '0')}`
 }
 
+export function getSemanaISO(fecha) {
+  const date = typeof fecha === 'string' ? new Date(fecha + 'T12:00:00') : fecha
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7)
+}
+
 // Calcula el offset necesario para que getSemana(offset) caiga en la semana ISO `numSemana`
 // del año en curso. Útil para saltar directo a una semana por número.
 export function getOffsetDesdeSemana(numSemana) {
