@@ -75,3 +75,31 @@ export function getPeriodoCN(quincena, mes, anio) {
     ? `1 al 15 de ${anio}-${String(mes).padStart(2, '0')}`
     : `16 al ${ult} de ${anio}-${String(mes).padStart(2, '0')}`
 }
+// Calcula el offset necesario para que getSemana(offset) caiga en la semana ISO `numSemana`
+// del año en curso. Útil para saltar directo a una semana por número.
+export function getOffsetDesdeSemana(numSemana) {
+  const hoy = new Date()
+  const anio = hoy.getFullYear()
+
+  // Primer jueves del año (define la semana 1 según ISO 8601)
+  const primerJueves = new Date(anio, 0, 1)
+  while (primerJueves.getDay() !== 4) primerJueves.setDate(primerJueves.getDate() + 1)
+
+  // Lunes de la semana 1
+  const lunes1 = new Date(primerJueves)
+  lunes1.setDate(primerJueves.getDate() - 3)
+
+  // Viernes de la semana ISO objetivo (viernes = lunes + 4)
+  const viernesObjetivo = new Date(lunes1)
+  viernesObjetivo.setDate(lunes1.getDate() + (numSemana - 1) * 7 + 4)
+
+  // Viernes de la semana actual
+  const dow = hoy.getDay()
+  const diasDesdeViernes = dow === 5 ? 0 : dow === 6 ? 1 : dow + 2
+  const viernesActual = new Date(hoy)
+  viernesActual.setDate(hoy.getDate() - diasDesdeViernes)
+
+  // Diferencia en semanas
+  const diffMs = viernesObjetivo.getTime() - viernesActual.getTime()
+  return Math.round(diffMs / (7 * 24 * 60 * 60 * 1000))
+}
