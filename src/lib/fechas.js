@@ -104,3 +104,11 @@ export function getOffsetDesdeSemana(numSemana) {
   const diffMs = viernesObjetivo.getTime() - viernesActual.getTime()
   return Math.round(diffMs / (7 * 24 * 60 * 60 * 1000))
 }
+export function getSemanaISO(fecha) {
+  const date = typeof fecha === 'string' ? new Date(fecha + 'T12:00:00') : fecha
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7)
+}
