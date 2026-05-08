@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useDB } from '../hooks/useDB'
-import { getSemana, fmtSemanaLabel } from '../lib/fechas'
+import { getSemana, fmtSemanaLabel, getOffsetDesdeSemana } from '../lib/fechas'
 import Modal from '../components/Modal'
 
 export default function Produccion() {
   const db = useDB()
   const [offset, setOffset] = useState(0)
+  const [inputSemana, setInputSemana] = useState('')
   const [filtros, setFiltros] = useState({ cuadrilla: '', proyecto: '', concepto: '' })
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState({ fecha: '', cuadrilla_id: '', concepto_id: '', proyecto_id: '', cantidad: '', precio_unitario: '', notas: '' })
@@ -32,6 +33,15 @@ export default function Produccion() {
     const id = e.target.value
     const conc = db.conceptos.find(c => c.id === id)
     setForm(f => ({ ...f, concepto_id: id, precio_unitario: conc ? conc.precio : '' }))
+  }
+
+  function handleIrASemana(e) {
+    e.preventDefault()
+    const num = parseInt(inputSemana)
+    if (!num || num < 1 || num > 53) return
+    const newOffset = getOffsetDesdeSemana(num)
+    setOffset(newOffset)
+    setInputSemana('')
   }
 
   const totalCalc = (parseFloat(form.cantidad) || 0) * (parseFloat(form.precio_unitario) || 0)
@@ -70,6 +80,22 @@ export default function Produccion() {
           <button className="btn btn-sm" onClick={() => setOffset(o => o + 1)}>Siguiente →</button>
           <button className="btn btn-sm text-gray-400" onClick={() => setOffset(0)}>Hoy</button>
         </div>
+
+        {/* Ir a semana por número */}
+        <form onSubmit={handleIrASemana} className="flex items-center gap-2 mb-3">
+          <label className="label mb-0 whitespace-nowrap">Ir a semana:</label>
+          <input
+            className="input w-20 text-center"
+            type="number"
+            min="1"
+            max="53"
+            placeholder="# sem"
+            value={inputSemana}
+            onChange={e => setInputSemana(e.target.value)}
+          />
+          <button type="submit" className="btn btn-sm">Ir</button>
+        </form>
+
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="label">Cuadrilla</label>
