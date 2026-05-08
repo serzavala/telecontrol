@@ -103,3 +103,41 @@ export function getOffsetDesdeSemana(numSemana) {
   const diffMs = viernesObjetivo.getTime() - viernesActual.getTime()
   return Math.round(diffMs / (7 * 24 * 60 * 60 * 1000))
 }
+// Número de semana ISO 8601 a partir de una fecha string 'YYYY-MM-DD' o un objeto Date
+export function getSemanaISO(fecha) {
+  const date = typeof fecha === 'string' ? new Date(fecha + 'T12:00:00') : fecha
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7)
+}
+
+// Calcula el offset necesario para que getSemana(offset) caiga en la semana ISO `numSemana`
+// del año en curso. Útil para saltar directo a una semana por número.
+export function getOffsetDesdeSemana(numSemana) {
+  const hoy = new Date()
+  const anio = hoy.getFullYear()
+
+  // Primer jueves del año (define la semana 1 según ISO 8601)
+  const primerJueves = new Date(anio, 0, 1)
+  while (primerJueves.getDay() !== 4) primerJueves.setDate(primerJueves.getDate() + 1)
+
+  // Lunes de la semana 1
+  const lunes1 = new Date(primerJueves)
+  lunes1.setDate(primerJueves.getDate() - 3)
+
+  // Viernes de la semana ISO objetivo (viernes = lunes + 4)
+  const viernesObjetivo = new Date(lunes1)
+  viernesObjetivo.setDate(lunes1.getDate() + (numSemana - 1) * 7 + 4)
+
+  // Viernes de la semana actual
+  const dow = hoy.getDay()
+  const diasDesdeViernes = dow === 5 ? 0 : dow === 6 ? 1 : dow + 2
+  const viernesActual = new Date(hoy)
+  viernesActual.setDate(hoy.getDate() - diasDesdeViernes)
+
+  // Diferencia en semanas
+  const diffMs = viernesObjetivo.getTime() - viernesActual.getTime()
+  return Math.round(diffMs / (7 * 24 * 60 * 60 * 1000))
+}

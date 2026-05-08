@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useDB } from '../hooks/useDB'
-import { getSemana, fmtSemanaLabel, getOffsetDesdeSemana } from '../lib/fechas'
+import { getSemana, fmtSemanaLabel, getSemanaISO, getOffsetDesdeSemana } from '../lib/fechas'
 import Modal from '../components/Modal'
 
 export default function Produccion() {
@@ -13,6 +13,7 @@ export default function Produccion() {
   const [saving, setSaving] = useState(false)
 
   const sem = getSemana(offset)
+  const numSemana = getSemanaISO(sem.ini) // semana ISO del viernes de inicio
   const cuadsSem = db.cuadrillas.filter(c => c.esquema === 'Semanal' || c.esquema === 'Ambas')
   const proysSem = db.proyectos.filter(p => p.tipo === 'Semanal')
 
@@ -39,8 +40,7 @@ export default function Produccion() {
     e.preventDefault()
     const num = parseInt(inputSemana)
     if (!num || num < 1 || num > 53) return
-    const newOffset = getOffsetDesdeSemana(num)
-    setOffset(newOffset)
+    setOffset(getOffsetDesdeSemana(num))
     setInputSemana('')
   }
 
@@ -68,7 +68,10 @@ export default function Produccion() {
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
-        <div><h2 className="text-lg font-medium">Producción semanal</h2><div className="text-xs text-gray-400">Registro diario de avances</div></div>
+        <div>
+          <h2 className="text-lg font-medium">Producción semanal</h2>
+          <div className="text-xs text-gray-400">Registro diario de avances</div>
+        </div>
         <button className="btn btn-primary" onClick={() => setModal(true)}>+ Nuevo avance</button>
       </div>
 
@@ -76,14 +79,19 @@ export default function Produccion() {
       <div className="card mb-4">
         <div className="flex items-center gap-3 mb-3">
           <button className="btn btn-sm" onClick={() => setOffset(o => o - 1)}>← Anterior</button>
-          <span className="font-medium text-sm flex-1 text-center">{fmtSemanaLabel(sem)}</span>
+          <div className="flex-1 text-center">
+            <span className="font-medium text-sm">{fmtSemanaLabel(sem)}</span>
+            <span className="ml-2 text-xs font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+              Semana {numSemana}
+            </span>
+          </div>
           <button className="btn btn-sm" onClick={() => setOffset(o => o + 1)}>Siguiente →</button>
           <button className="btn btn-sm text-gray-400" onClick={() => setOffset(0)}>Hoy</button>
         </div>
 
         {/* Ir a semana por número */}
         <form onSubmit={handleIrASemana} className="flex items-center gap-2 mb-3">
-          <label className="label mb-0 whitespace-nowrap">Ir a semana:</label>
+          <label className="label mb-0 whitespace-nowrap text-xs">Ir a semana:</label>
           <input
             className="input w-20 text-center"
             type="number"
