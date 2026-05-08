@@ -42,52 +42,82 @@ export default function Gastos() {
 
   return (
     <div>
+      {/* ── HEADER ── */}
       <div className="page-header">
-        <div><h2>Gastos operativos</h2><div className="page-header-sub">Por cuadrilla y/o empleado — filtros combinados</div></div>
+        <div>
+          <h2>Gastos operativos</h2>
+          <div className="page-header-sub">Por cuadrilla y/o empleado — filtros combinados</div>
+        </div>
         <button className="btn btn-primary" onClick={() => setModal(true)}>+ Nuevo gasto</button>
       </div>
 
+      {/* ── FILTROS — 1 columna en móvil, 3 en desktop ── */}
       <div className="card mb-4">
-        <div className="form-row c3" style={{ marginBottom: '8px' }}>
-          <div><label className="label">Semana</label><input className="input" type="number" placeholder="Todas" value={filtros.semana} onChange={setFilt('semana')} /></div>
-          <div><label className="label">Cuadrilla</label>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+          <div>
+            <label className="label">Semana</label>
+            <input className="input" type="number" placeholder="Todas" value={filtros.semana} onChange={setFilt('semana')} />
+          </div>
+          <div>
+            <label className="label">Cuadrilla</label>
             <select className="input" value={filtros.cuadrilla_id} onChange={setFilt('cuadrilla_id')}>
               <option value="">Todas</option>
               {db.cuadrillas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
           </div>
-          <div><label className="label">Empleado</label>
+          <div>
+            <label className="label">Empleado</label>
             <select className="input" value={filtros.empleado_id} onChange={setFilt('empleado_id')}>
               <option value="">Todos</option>
               {ig.empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
             </select>
           </div>
         </div>
-        <div className="form-row c2" style={{ marginBottom: 0 }}>
-          <div><label className="label">Categoría</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="label">Categoría</label>
             <select className="input" value={filtros.categoria} onChange={setFilt('categoria')}>
               <option value="">Todas</option>
               {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
-          <div><label className="label">Asignación</label>
+          <div>
+            <label className="label">Asignación</label>
             <select className="input" value={filtros.asignacion} onChange={setFilt('asignacion')}>
               <option value="">Todos</option>
-              <option value="general">Solo generales (sin empleado)</option>
-              <option value="personal">Solo asignados a empleado</option>
+              <option value="general">Solo generales</option>
+              <option value="personal">Solo por empleado</option>
             </select>
           </div>
         </div>
       </div>
 
-      <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(4,minmax(0,1fr))' }}>
-        <div className="metric metric-primary"><div className="metric-label">Total gastos</div><div className="metric-value">{ig.fmt$(total)}</div></div>
-        <div className="metric metric-light"><div className="metric-label">Gastos generales</div><div className="metric-value" style={{ color: '#A82020' }}>{ig.fmt$(totalGeneral)}</div><div className="metric-sub">Sin empleado asignado</div></div>
-        <div className="metric metric-light"><div className="metric-label">Gastos por empleado</div><div className="metric-value" style={{ color: '#A82020' }}>{ig.fmt$(totalPersonal)}</div><div className="metric-sub">Asignados personalmente</div></div>
-        <div className="metric metric-light"><div className="metric-label">Registros</div><div className="metric-value" style={{ color: '#0F3460' }}>{rows.length}</div></div>
+      {/* ── MÉTRICAS — 2 cols en móvil, 4 en desktop ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div className="metric metric-primary col-span-2 sm:col-span-1">
+          <div className="metric-label">Total gastos</div>
+          <div className="metric-value">{ig.fmt$(total)}</div>
+        </div>
+        <div className="metric metric-light">
+          <div className="metric-label">Generales</div>
+          <div className="metric-value" style={{ color: '#A82020' }}>{ig.fmt$(totalGeneral)}</div>
+          <div className="metric-sub">Sin empleado</div>
+        </div>
+        <div className="metric metric-light">
+          <div className="metric-label">Por empleado</div>
+          <div className="metric-value" style={{ color: '#A82020' }}>{ig.fmt$(totalPersonal)}</div>
+          <div className="metric-sub">Personales</div>
+        </div>
+        <div className="metric metric-light">
+          <div className="metric-label">Registros</div>
+          <div className="metric-value" style={{ color: '#0F3460' }}>{rows.length}</div>
+        </div>
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      {/* ── TABLA (desktop) / TARJETAS (móvil) ── */}
+
+      {/* Tabla — solo visible en sm+ */}
+      <div className="card hidden sm:block" style={{ padding: 0, overflow: 'hidden' }}>
         <table className="w-full">
           <thead><tr>
             <th className="th w-20">Sem.</th>
@@ -120,9 +150,44 @@ export default function Gastos() {
         </table>
       </div>
 
+      {/* Tarjetas — solo visibles en móvil */}
+      <div className="flex flex-col gap-3 sm:hidden">
+        {rows.length ? rows.map(r => {
+          const c = db.getCuadrilla(r.cuadrilla_id)
+          const emp = ig.getEmpleado(r.empleado_id)
+          return (
+            <div key={r.id} className="card" style={{ padding: '14px 16px' }}>
+              {/* fila superior: categoría + monto */}
+              <div className="flex items-center justify-between mb-2">
+                <span className={`badge ${CATBADGE[r.categoria] || 'badge-gray'}`}>{r.categoria}</span>
+                <span className="font-semibold text-base" style={{ color: '#A82020' }}>{ig.fmt$(r.monto)}</span>
+              </div>
+              {/* concepto */}
+              <div className="font-medium text-sm mb-2" style={{ color: '#1a2340' }}>{r.concepto}</div>
+              {/* detalles */}
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs" style={{ color: '#6B7A99' }}>
+                <div><span className="font-medium">Semana:</span> {r.semana}</div>
+                <div><span className="font-medium">Fecha:</span> {r.fecha}</div>
+                <div><span className="font-medium">Cuadrilla:</span> {r.cuadrilla_id ? c.nombre : '—'}</div>
+                <div><span className="font-medium">Empleado:</span> {r.empleado_id ? emp.nombre : 'General'}</div>
+                {r.comprobante && <div className="col-span-2"><span className="font-medium">Ref:</span> {r.comprobante}</div>}
+                {r.comentarios && <div className="col-span-2"><span className="font-medium">Notas:</span> {r.comentarios}</div>}
+              </div>
+              {/* eliminar */}
+              <div className="flex justify-end mt-3">
+                <button className="btn btn-outline btn-sm" onClick={() => ig.deleteGasto(r.id)}>Eliminar</button>
+              </div>
+            </div>
+          )
+        }) : (
+          <div className="card text-center py-10" style={{ color: '#A0AABB' }}>Sin gastos registrados.</div>
+        )}
+      </div>
+
+      {/* ── MODAL ── */}
       <Modal open={modal} onClose={() => setModal(false)} title="Nuevo gasto operativo">
         <form onSubmit={handleSave} className="space-y-3">
-          <div className="form-row c3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div><label className="label">Fecha *</label><input className="input" type="date" value={form.fecha} onChange={setF('fecha')} required /></div>
             <div><label className="label">Semana *</label><input className="input" type="number" value={form.semana} onChange={setF('semana')} required /></div>
             <div><label className="label">Cuadrilla</label>
@@ -132,7 +197,7 @@ export default function Gastos() {
               </select>
             </div>
           </div>
-          <div className="form-row c2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div><label className="label">Categoría</label>
               <select className="input" value={form.categoria} onChange={setF('categoria')}>
                 {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
@@ -140,11 +205,11 @@ export default function Gastos() {
             </div>
             <div><label className="label">Concepto *</label><input className="input" value={form.concepto} onChange={setF('concepto')} required /></div>
           </div>
-          <div style={{ background: '#F4F6FB', borderRadius: 8, padding: '10px 12px', marginBottom: 0 }}>
+          <div style={{ background: '#F4F6FB', borderRadius: 8, padding: '10px 12px' }}>
             <div style={{ fontSize: 12, fontWeight: 500, color: '#6B7A99', marginBottom: 8 }}>
-              Asignar a empleado <span style={{ fontWeight: 400 }}>(opcional — déjalo vacío si es gasto general)</span>
+              Asignar a empleado <span style={{ fontWeight: 400 }}>(opcional)</span>
             </div>
-            <div className="form-row c2" style={{ marginBottom: 0 }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div><label className="label">Empleado</label>
                 <select className="input" value={form.empleado_id} onChange={setF('empleado_id')}>
                   <option value="">Sin asignar (gasto general)</option>
@@ -156,7 +221,7 @@ export default function Gastos() {
               </div>
             </div>
           </div>
-          <div className="form-row c2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div><label className="label">Monto ($) *</label><input className="input" type="number" min="0" step="0.01" value={form.monto} onChange={setF('monto')} required /></div>
             <div><label className="label">Comprobante / referencia</label><input className="input" value={form.comprobante} onChange={setF('comprobante')} placeholder="Folio, nota, ticket" /></div>
           </div>
