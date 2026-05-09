@@ -8,7 +8,9 @@ export default function Dashboard() {
   const hoy = new Date()
   const info = getInfoCortesCN()
 
-  const totalProd = produccion.reduce((a, r) => a + Number(r.total), 0)
+  const totalProd = (cortes || [])
+  .filter(c => c.tipo === 'Semanal' && c.estado_pago === 'Pendiente')
+  .reduce((a, c) => a + Number(c.total), 0)
   const totalCN = registrosCN.filter(r => r.estado === 'Pendiente').reduce((a, r) => a + Number(r.monto), 0)
   const pendientes = (cortes || []).filter(c => c.estado_pago === 'Pendiente').slice(0, 5)
 
@@ -49,7 +51,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-4 gap-3 mb-5">
         <div className="metric"><div className="metric-label">Cuadrillas</div><div className="metric-value">{cuadrillas.length}</div><div className="metric-sub">Registradas</div></div>
-        <div className="metric"><div className="metric-label">Prod. acumulada</div><div className="metric-value">{fmt$(totalProd)}</div><div className="metric-sub">Sin corte</div></div>
+        <div className="metric"><div className="metric-label">Semanal pendiente</div><div className="metric-value">{fmt$(totalProd)}</div><div className="metric-sub">Sin cobrar</div></div>
         <div className="metric"><div className="metric-label">CN pendiente</div><div className="metric-value">{fmt$(totalCN)}</div><div className="metric-sub">Sin cobrar</div></div>
         <div className="metric"><div className="metric-label">Total por cobrar</div><div className="metric-value">{fmt$(totalProd + totalCN)}</div><div className="metric-sub">Ambos esquemas</div></div>
       </div>

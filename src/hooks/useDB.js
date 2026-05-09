@@ -134,7 +134,15 @@ export function useDB() {
     if (!error) load()
     return { error }
   }
-
+  async function togglePagoCorte(id, estadoActual) {
+  const nuevo = estadoActual === 'Pagado' ? 'Pendiente' : 'Pagado'
+  const data = { estado_pago: nuevo }
+  if (nuevo === 'Pagado') data.fecha_pago = new Date().toISOString().split('T')[0]
+  if (nuevo === 'Pendiente') data.fecha_pago = null
+  const { error } = await supabase.from('cortes').update(data).eq('id', id)
+  if (!error) load()
+  return { error }
+  }
   return {
     cuadrillas, proyectos, conceptos, produccion, registrosCN, cortes,
     loading, reload: load, fmt$,
@@ -144,6 +152,6 @@ export function useDB() {
     addConcepto, updateConcepto, deleteConcepto,
     addProduccion, updateProduccion, deleteProduccion,
     addRegistroCN, updateRegistroCN, deleteRegistroCN,
-    addCorte, updateCorte, deleteCorte,
+    addCorte, updateCorte, deleteCorte, togglePagoCorte,
   }
 }
