@@ -1,11 +1,8 @@
 // Semana de producción: VIERNES a JUEVES
-// Devuelve el viernes de la semana actual + offset
+
 export function getSemana(offset = 0) {
   const hoy = new Date()
-  // getDay(): 0=dom, 1=lun, 2=mar, 3=mie, 4=jue, 5=vie, 6=sab
   const dow = hoy.getDay()
-  // Días desde el viernes más reciente
-  // Si hoy es vie(5)=0, sab(6)=1, dom(0)=2, lun(1)=3, mar(2)=4, mie(3)=5, jue(4)=6
   const diasDesdeViernes = dow === 5 ? 0 : dow === 6 ? 1 : dow + 2
   const viernes = new Date(hoy)
   viernes.setDate(hoy.getDate() - diasDesdeViernes + offset * 7)
@@ -14,21 +11,16 @@ export function getSemana(offset = 0) {
   return {
     ini: viernes.toISOString().split('T')[0],
     fin: jueves.toISOString().split('T')[0],
-    lunes: viernes, // mantenemos el nombre para compatibilidad
+    lunes: viernes,
     dom: jueves,
   }
 }
 
 export function fmtSemanaLabel(s) {
   const opts = { day: 'numeric', month: 'short' }
-  return (
-    s.lunes.toLocaleDateString('es-MX', opts) +
-    ' – ' +
-    s.dom.toLocaleDateString('es-MX', { ...opts, year: 'numeric' })
-  )
+  return s.lunes.toLocaleDateString('es-MX', opts) + ' – ' + s.dom.toLocaleDateString('es-MX', { ...opts, year: 'numeric' })
 }
 
-// Array de N semanas hacia atrás desde la semana actual (viernes a jueves)
 export function getSemanas(n) {
   const hoy = new Date()
   const dow = hoy.getDay()
@@ -44,14 +36,42 @@ export function getSemanas(n) {
     sems.push({
       ini: viernes.toISOString().split('T')[0],
       fin: jueves.toISOString().split('T')[0],
-      label: viernes.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) +
-             ' – ' + jueves.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+      label: viernes.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) + ' – ' + jueves.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
     })
   }
   return sems
 }
 
-// Info de próximos cortes CN basada en la fecha de hoy
+// Número de semana PROPIA (viernes a jueves)
+// Semana 1 = primera semana viernes-jueves del año
+export function getSemanaISO(fecha) {
+  const date = typeof fecha === 'string' ? new Date(fecha + 'T12:00:00') : new Date(fecha)
+  const anio = date.getFullYear()
+  const enero1 = new Date(anio, 0, 1)
+  const dow1 = enero1.getDay()
+  // Retroceder hasta el viernes anterior o igual al 1 de enero
+  const diasHastaViernes = dow1 === 5 ? 0 : dow1 === 6 ? 6 : dow1 + 2
+  const primerViernes = new Date(enero1)
+  primerViernes.setDate(enero1.getDate() - diasHastaViernes)
+  const diffMs = date - primerViernes
+  const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDias < 0) return getSemanaISO(new Date(anio - 1, 11, 31))
+  return Math.floor(diffDias / 7) + 1
+}
+
+export function getOffsetDesdeSemana(numSemana) {
+  for (let o = -30; o <= 30; o++) {
+    const s = getSemana(o)
+    const semFin = getSemanaISO(s.fin)
+    const anioFin = new Date(s.fin).getFullYear()
+    if (semFin === numSemana && anioFin === new Date().getFullYear()) return o
+  }
+  for (let o = -30; o <= 30; o++) {
+    if (getSemanaISO(getSemana(o).fin) === numSemana) return o
+  }
+  return 0
+}
+
 export function getInfoCortesCN() {
   const hoy = new Date()
   const d = hoy.getDate()
@@ -62,43 +82,11 @@ export function getInfoCortesCN() {
   if (d === pen) return { tipo: 'warn', msg: `Hoy es día ${d} — corte 2ª quincena CN. Genera el PDF hoy.` }
   if (d === ult) return { tipo: 'success', msg: 'Último día del mes — cobro 2ª quincena CN.' }
   if (d < 14) return { tipo: 'info', msg: `Faltan ${14 - d} día${14 - d > 1 ? 's' : ''} para el corte CN del día 14.` }
-  if (d > 15 && d < pen) {
-    const ds = pen - d
-    return { tipo: 'info', msg: `Faltan ${ds} día${ds > 1 ? 's' : ''} para el corte CN del día ${pen}.` }
-  }
+  if (d > 15 && d < pen) { const ds = pen - d; return { tipo: 'info', msg: `Faltan ${ds} día${ds > 1 ? 's' : ''} para el corte CN del día ${pen}.` } }
   return null
 }
 
 export function getPeriodoCN(quincena, mes, anio) {
   const ult = new Date(anio, mes, 0).getDate()
-  return quincena === '1'
-    ? `1 al 15 de ${anio}-${String(mes).padStart(2, '0')}`
-    : `16 al ${ult} de ${anio}-${String(mes).padStart(2, '0')}`
-}
-
-export function getSemanaISO(fecha) {
-  const date = typeof fecha === 'string' ? new Date(fecha + 'T12:00:00') : fecha
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-  const dayNum = d.getUTCDay() || 7
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7)
-}
-
-// Calcula el offset necesario para que getSemana(offset) caiga en la semana ISO `numSemana`
-// del año en curso. Útil para saltar directo a una semana por número.
-export function getOffsetDesdeSemana(numSemana) {
-  // Busca primero cerca del presente (año actual)
-  for (let o = -30; o <= 30; o++) {
-    const s = getSemana(o)
-    const semFin = getSemanaISO(s.fin)
-    const anioFin = new Date(s.fin).getFullYear()
-    if (semFin === numSemana && anioFin === new Date().getFullYear()) return o
-  }
-  // Fallback sin filtro de año
-  for (let o = -30; o <= 30; o++) {
-    const s = getSemana(o)
-    if (getSemanaISO(s.fin) === numSemana) return o
-  }
-  return 0
+  return quincena === '1' ? `1 al 15 de ${anio}-${String(mes).padStart(2, '0')}` : `16 al ${ult} de ${anio}-${String(mes).padStart(2, '0')}`
 }
