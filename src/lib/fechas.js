@@ -1,7 +1,17 @@
 // Semana de producción: VIERNES a JUEVES
+// Usa fecha LOCAL para evitar problemas de zona horaria
+
+function hoyLocal() {
+  const hoy = new Date()
+  // Retorna la fecha en formato YYYY-MM-DD usando hora local
+  const y = hoy.getFullYear()
+  const m = String(hoy.getMonth() + 1).padStart(2, '0')
+  const d = String(hoy.getDate()).padStart(2, '0')
+  return new Date(`${y}-${m}-${d}T12:00:00`)
+}
 
 export function getSemana(offset = 0) {
-  const hoy = new Date()
+  const hoy = hoyLocal()
   const dow = hoy.getDay()
   const diasDesdeViernes = dow === 5 ? 0 : dow === 6 ? 1 : dow + 2
   const viernes = new Date(hoy)
@@ -22,7 +32,7 @@ export function fmtSemanaLabel(s) {
 }
 
 export function getSemanas(n) {
-  const hoy = new Date()
+  const hoy = hoyLocal()
   const dow = hoy.getDay()
   const diasDesdeViernes = dow === 5 ? 0 : dow === 6 ? 1 : dow + 2
   const viernesActual = new Date(hoy)
@@ -43,19 +53,17 @@ export function getSemanas(n) {
 }
 
 // Número de semana PROPIA (viernes a jueves)
-// Semana 1 = primera semana viernes-jueves del año
 export function getSemanaISO(fecha) {
   const date = typeof fecha === 'string' ? new Date(fecha + 'T12:00:00') : new Date(fecha)
   const anio = date.getFullYear()
-  const enero1 = new Date(anio, 0, 1)
+  const enero1 = new Date(`${anio}-01-01T12:00:00`)
   const dow1 = enero1.getDay()
-  // Retroceder hasta el viernes anterior o igual al 1 de enero
   const diasHastaViernes = dow1 === 5 ? 0 : dow1 === 6 ? 6 : dow1 + 2
   const primerViernes = new Date(enero1)
   primerViernes.setDate(enero1.getDate() - diasHastaViernes)
   const diffMs = date - primerViernes
   const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-  if (diffDias < 0) return getSemanaISO(new Date(anio - 1, 11, 31))
+  if (diffDias < 0) return getSemanaISO(new Date(`${anio - 1}-12-31T12:00:00`))
   return Math.floor(diffDias / 7) + 1
 }
 
@@ -63,8 +71,8 @@ export function getOffsetDesdeSemana(numSemana) {
   for (let o = -30; o <= 30; o++) {
     const s = getSemana(o)
     const semFin = getSemanaISO(s.fin)
-    const anioFin = new Date(s.fin).getFullYear()
-    if (semFin === numSemana && anioFin === new Date().getFullYear()) return o
+    const anioFin = new Date(s.fin + 'T12:00:00').getFullYear()
+    if (semFin === numSemana && anioFin === hoyLocal().getFullYear()) return o
   }
   for (let o = -30; o <= 30; o++) {
     if (getSemanaISO(getSemana(o).fin) === numSemana) return o
@@ -73,7 +81,7 @@ export function getOffsetDesdeSemana(numSemana) {
 }
 
 export function getInfoCortesCN() {
-  const hoy = new Date()
+  const hoy = hoyLocal()
   const d = hoy.getDate()
   const ult = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate()
   const pen = ult - 1
