@@ -58,8 +58,8 @@ export default function Layout() {
         <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#F5A623', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '15px', color: '#0F3460', flexShrink: 0 }}>N</div>
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 500, color: '#ffffff' }}>TeleControl</div>
-            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginTop: '1px' }}>NOVUS — Innovación y Futuro</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: '#F5A623', letterSpacing: '0.05em' }}>NOVUS</div>
+            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.7)', marginTop: '1px', letterSpacing: '0.03em' }}>Innovación y Futuro</div>
           </div>
         </div>
         <nav className="flex-1 py-2">
