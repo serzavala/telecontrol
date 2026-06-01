@@ -2,11 +2,19 @@ import { useState } from 'react'
 import { useDB } from '../hooks/useDB'
 import { generarPDFSemanal } from '../lib/pdf'
 
+const IVA_RATE = 0.16
+
 export default function CorteSemanal() {
   const db = useDB()
   const [filtros, setFiltros] = useState({ inicio: '', fin: '', proyecto_id: '' })
   const [calculado, setCalculado] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // Campos de facturación
+  const [cifraOficial, setCifraOficial] = useState('')
+  const [comentarios, setComentarios] = useState('')
+  const [documento, setDocumento] = useState(null)
+
   const setF = k => e => setFiltros(f => ({ ...f, [k]: e.target.value }))
 
   const rows = db.produccion.filter(r => {
@@ -18,17 +26,55 @@ export default function CorteSemanal() {
   const total = rows.reduce((a, r) => a + Number(r.total), 0)
   const cuadsUniq = [...new Set(rows.map(r => r.cuadrilla_id))]
 
+  // Cálculos de facturación
+  const oficial = parseFloat(cifraOficial) || 0
+  const diferencia = oficial - total
+  const iva = oficial * IVA_RATE
+  const totalFacturar = oficial + iva
+
   async function guardarCorte() {
     if (!filtros.inicio || !filtros.fin) { alert('Selecciona el período primero.'); return }
     if (!rows.length) { alert('No hay registros en ese período.'); return }
+    if (!oficial) { alert('Captura la cifra oficial del cliente.'); return }
     const proy = filtros.proyecto_id ? db.getProyecto(filtros.proyecto_id).nombre : 'Todos'
     const periodo = `${filtros.inicio} al ${filtros.fin}`
     const yaExiste = db.cortes.find(c => c.tipo === 'Semanal' && c.periodo === periodo && c.proyecto_nombre === proy)
     if (yaExiste) { alert('Ya existe un corte guardado para este período.'); return }
+
     setSaving(true)
-    await db.addCorte({ tipo: 'Semanal', periodo, proyecto_nombre: proy, proyecto_id: filtros.proyecto_id || null, total, estado_pago: 'Pendiente', fecha_corte: new Date().toISOString().split('T')[0] })
+
+    // Subir documento si lo hay
+    let documento_url = null
+    if (documento) {
+      const { url, error: upErr } = await db.subirDocumentoCorte(documento)
+      if (upErr) {
+        setSaving(false)
+        alert('Error al subir el documento: ' + upErr.message)
+        return
+      }
+      documento_url = url
+    }
+
+    const { error } = await db.addCorte({
+      tipo: 'Semanal',
+      periodo,
+      proyecto_nombre: proy,
+      proyecto_id: filtros.proyecto_id || null,
+      total,                                    // tu estimado (respaldo)
+      cifra_oficial: oficial,                   // subtotal cliente
+      iva,                                      // 16%
+      total_facturar: totalFacturar,            // lo que se cobra (con IVA)
+      comentarios_facturacion: comentarios || null,
+      documento_url,
+      estado_pago: 'Pendiente',
+      fecha_corte: new Date().toISOString().split('T')[0],
+    })
+
     setSaving(false)
+    if (error) { alert('Error al guardar: ' + error.message); return }
     alert('Corte guardado. Visible en Historial de cortes.')
+    // Limpiar campos de facturación
+    setCifraOficial(''); setComentarios(''); setDocumento(null)
   }
 
   function generarPDF() {
@@ -66,8 +112,42 @@ export default function CorteSemanal() {
           <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="metric"><div className="metric-label">Registros</div><div className="metric-value">{rows.length}</div></div>
             <div className="metric"><div className="metric-label">Cuadrillas</div><div className="metric-value">{cuadsUniq.length}</div></div>
-            <div className="metric"><div className="metric-label">Total a cobrar</div><div className="metric-value">{db.fmt$(total)}</div></div>
+            <div className="metric"><div className="metric-label">Estimado producción</div><div className="metric-value">{db.fmt$(total)}</div></div>
           </div>
+
+          {/* ── FACTURACIÓN ── */}
+          <div className="card mb-4">
+            <div className="text-sm font-medium mb-3">Facturación de la semana</div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="label">Cifra oficial del cliente (subtotal) *</label>
+                <input className="input" type="number" min="0" step="0.01" value={cifraOficial} onChange={e => setCifraOficial(e.target.value)} placeholder="0.00" />
+              </div>
+              <div>
+                <label className="label">Documento del cliente (Excel o captura)</label>
+                <input className="input" type="file" accept=".xlsx,.xls,.csv,image/*" onChange={e => setDocumento(e.target.files[0] || null)} />
+              </div>
+            </div>
+            <div className="mb-3">
+              <label className="label">Comentarios (descuentos, anticipos, camionetas, etc.)</label>
+              <textarea className="input" rows={2} value={comentarios} onChange={e => setComentarios(e.target.value)} />
+            </div>
+
+            {/* Desglose calculado */}
+            <div className="bg-gray-50 rounded-lg p-4 text-sm space-y-2">
+              <div className="flex justify-between"><span className="text-gray-500">Estimado producción</span><span>{db.fmt$(total)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Cifra oficial (subtotal)</span><span>{db.fmt$(oficial)}</span></div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Diferencia</span>
+                <span className={diferencia >= 0 ? 'text-green-600' : 'text-red-600'}>
+                  {diferencia >= 0 ? '+' : ''}{db.fmt$(diferencia)}
+                </span>
+              </div>
+              <div className="border-t border-gray-200 pt-2 flex justify-between"><span className="text-gray-500">IVA (16%)</span><span>{db.fmt$(iva)}</span></div>
+              <div className="flex justify-between font-semibold text-base"><span>Total a facturar</span><span>{db.fmt$(totalFacturar)}</span></div>
+            </div>
+          </div>
+
           <div className="card p-0 overflow-hidden">
             <table className="w-full">
               <thead><tr>

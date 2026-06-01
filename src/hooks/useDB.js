@@ -135,14 +135,36 @@ export function useDB() {
     return { error }
   }
   async function togglePagoCorte(id, estadoActual) {
-  const nuevo = estadoActual === 'Pagado' ? 'Pendiente' : 'Pagado'
-  const data = { estado_pago: nuevo }
-  if (nuevo === 'Pagado') data.fecha_pago = new Date().toISOString().split('T')[0]
-  if (nuevo === 'Pendiente') data.fecha_pago = null
-  const { error } = await supabase.from('cortes').update(data).eq('id', id)
-  if (!error) load()
-  return { error }
+    const nuevo = estadoActual === 'Pagado' ? 'Pendiente' : 'Pagado'
+    const data = { estado_pago: nuevo }
+    if (nuevo === 'Pagado') data.fecha_pago = new Date().toISOString().split('T')[0]
+    if (nuevo === 'Pendiente') data.fecha_pago = null
+    const { error } = await supabase.from('cortes').update(data).eq('id', id)
+    if (!error) load()
+    return { error }
   }
+
+  // ── Documentos de cortes (Storage) ──
+  async function subirDocumentoCorte(file) {
+    if (!file) return { url: null, error: null }
+    const ext = file.name.split('.').pop()
+    const nombre = `corte_${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage
+      .from('documentos-cortes')
+      .upload(nombre, file)
+    if (upErr) return { url: null, error: upErr }
+    return { url: nombre, error: null }
+  }
+
+  async function getDocumentoUrl(path) {
+    if (!path) return null
+    const { data, error } = await supabase.storage
+      .from('documentos-cortes')
+      .createSignedUrl(path, 3600) // válida 1 hora
+    if (error) return null
+    return data.signedUrl
+  }
+
   return {
     cuadrillas, proyectos, conceptos, produccion, registrosCN, cortes,
     loading, reload: load, fmt$,
@@ -153,5 +175,6 @@ export function useDB() {
     addProduccion, updateProduccion, deleteProduccion,
     addRegistroCN, updateRegistroCN, deleteRegistroCN,
     addCorte, updateCorte, deleteCorte, togglePagoCorte,
+    subirDocumentoCorte, getDocumentoUrl,
   }
 }
