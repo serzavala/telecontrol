@@ -58,11 +58,9 @@ export default function Prestamos() {
       notas: editForm.notas,
       estado: editForm.estado,
     }
-    // Si se cancela, marcar saldo en 0
     if (editForm.estado === 'Cancelado') {
       update.saldo = 0
     }
-    // Si se marca pagado manualmente
     if (editForm.estado === 'Liquidado') {
       update.saldo = 0
       update.monto_pagado = prestamoActual.monto_original
@@ -99,7 +97,6 @@ export default function Prestamos() {
   async function openDetalle(p) {
     setDetalleModal(p)
     setLoadingHistorial(true)
-    // Buscar en auditoría los cambios de este préstamo
     const { data } = await supabase
       .from('auditoria')
       .select('*')
@@ -131,9 +128,9 @@ export default function Prestamos() {
       </div>
 
       <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(4,minmax(0,1fr))' }}>
-        <div className="metric metric-light"><div className="metric-label">Préstamos activos</div><div className="metric-value" style={{ color: '#0F3460' }}>{activos.length}</div><div className="metric-sub">Personales</div></div>
+        <div className="metric metric-light"><div className="metric-label">Préstamos activos</div><div className="metric-value" style={{ color: 'var(--tc-text)' }}>{activos.length}</div><div className="metric-sub">Personales</div></div>
         <div className="metric metric-primary"><div className="metric-label">Saldo total</div><div className="metric-value">{ig.fmt$(totalSaldo)}</div><div className="metric-sub">Por recuperar</div></div>
-        <div className="metric metric-light"><div className="metric-label">Anticipos activos</div><div className="metric-value" style={{ color: '#0F3460' }}>{operativos.filter(p => p.estado === 'Activo').length}</div><div className="metric-sub">Operativos</div></div>
+        <div className="metric metric-light"><div className="metric-label">Anticipos activos</div><div className="metric-value" style={{ color: 'var(--tc-text)' }}>{operativos.filter(p => p.estado === 'Activo').length}</div><div className="metric-sub">Operativos</div></div>
         <div className="metric metric-gold"><div className="metric-label">Anticipos pendientes</div><div className="metric-value">{ig.fmt$(operativos.filter(p => p.estado === 'Activo').reduce((a, p) => a + Number(p.saldo), 0))}</div></div>
       </div>
 
@@ -165,7 +162,6 @@ export default function Prestamos() {
                   <td className="td" style={{ fontSize: 11 }}>{p.fecha}</td>
                   <td className="td" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <div>{p.concepto || '—'}</div>
-                    {/* Barra de progreso */}
                     {p.estado === 'Activo' && (
                       <div style={{ marginTop: 4, height: 4, background: '#E8ECF4', borderRadius: 2, width: '100%' }}>
                         <div style={{ height: '100%', background: '#0F3460', borderRadius: 2, width: pct + '%', transition: 'width .3s' }} />
@@ -311,13 +307,12 @@ export default function Prestamos() {
           <div style={{ background: 'var(--tc-surface, #fff)', borderRadius: 14, padding: '1.5rem', width: 580, maxWidth: '95%', maxHeight: '80vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <div>
-                <h3 style={{ fontSize: 16, fontWeight: 500, color: '#0F3460' }}>Historial de cambios</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 500, color: 'var(--tc-text, #0F3460)' }}>Historial de cambios</h3>
                 <div style={{ fontSize: 12, color: '#6B7A99' }}>{ig.getEmpleado(detalleModal.empleado_id).nombre} · {detalleModal.concepto || 'Sin concepto'}</div>
               </div>
               <button className="btn btn-outline btn-sm" onClick={() => setDetalleModal(null)}>✕</button>
             </div>
 
-            {/* Resumen del préstamo */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
               {[
                 { label: 'Monto original', val: ig.fmt$(detalleModal.monto_original), color: '#0F3460' },
@@ -331,7 +326,6 @@ export default function Prestamos() {
               ))}
             </div>
 
-            {/* Historial de auditoría */}
             <div style={{ fontSize: 12, fontWeight: 500, color: '#6B7A99', marginBottom: 8 }}>
               Historial de modificaciones ({historial.length})
             </div>

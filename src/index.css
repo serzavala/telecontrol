@@ -136,3 +136,23 @@
 [data-tema="oscuro"] .alert-success { background: #052e16 !important; color: #6EE7B7 !important; }
 [data-tema="oscuro"] .corte-card { background: var(--tc-surface) !important; border-color: var(--tc-border) !important; }
 [data-tema="oscuro"] .corte-card:hover { background: var(--tc-hover) !important; }
+/* ===== Overrides de contraste para clases fijas de Tailwind en modo oscuro ===== */
+[data-tema="oscuro"] .text-gray-400 { color: var(--tc-text-muted) !important; }
+[data-tema="oscuro"] .text-gray-500 { color: var(--tc-text-muted) !important; }
+[data-tema="oscuro"] .text-gray-600 { color: #E2E8F0 !important; }
+[data-tema="oscuro"] .text-gray-700 { color: #F1F5F9 !important; }
+[data-tema="oscuro"] .text-gray-900 { color: var(--tc-text) !important; }
+
+[data-tema="oscuro"] .bg-gray-50  { background-color: #1a2332 !important; }
+[data-tema="oscuro"] .bg-gray-100 { background-color: #252F3F !important; }
+
+[data-tema="oscuro"] .border-gray-50  { border-color: var(--tc-border) !important; }
+[data-tema="oscuro"] .border-gray-100 { border-color: var(--tc-border) !important; }
+[data-tema="oscuro"] .border-gray-200 { border-color: var(--tc-border) !important; }
+
+/* Colores semánticos: más claros para que resalten sobre fondo oscuro */
+[data-tema="oscuro"] .text-green-600,
+[data-tema="oscuro"] .text-green-700 { color: #6EE7B7 !important; }
+[data-tema="oscuro"] .text-red-600   { color: #FCA5A5 !important; }
+[data-tema="oscuro"] .text-amber-600,
+[data-tema="oscuro"] .text-amber-700 { color: #FCD34D !important; }
