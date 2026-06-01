@@ -8,7 +8,7 @@ import 'jspdf-autotable'
 export default function Empleados() {
   const ig = useIG()
   const db = useDB()
-  const emptyForm = { numero: '', nombre: '', puesto: '', cuadrilla_id: '', sueldo_diario: '', tipo_pago: 'Semanal' }
+  const emptyForm = { numero: '', nombre: '', puesto: '', cuadrilla_id: '', sueldo_diario: '', tipo_pago: 'Semanal', banco: '', cuenta: '', clabe: '', titular_cuenta: '' }
   const [modal, setModal] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(emptyForm)
@@ -36,6 +36,10 @@ export default function Empleados() {
       cuadrilla_id: emp.cuadrilla_id || '',
       sueldo_diario: emp.sueldo_diario || '',
       tipo_pago: emp.tipo_pago || 'Semanal',
+      banco: emp.banco || '',
+      cuenta: emp.cuenta || '',
+      clabe: emp.clabe || '',
+      titular_cuenta: emp.titular_cuenta || '',
     })
     setModal(true)
   }
@@ -44,7 +48,15 @@ export default function Empleados() {
     e.preventDefault()
     if (!form.numero || !form.nombre || !form.sueldo_diario) { alert('Completa los campos obligatorios.'); return }
     setSaving(true)
-    const data = { ...form, sueldo_diario: parseFloat(form.sueldo_diario), cuadrilla_id: form.cuadrilla_id || null }
+    const data = {
+      ...form,
+      sueldo_diario: parseFloat(form.sueldo_diario),
+      cuadrilla_id: form.cuadrilla_id || null,
+      banco: form.banco || null,
+      cuenta: form.cuenta || null,
+      clabe: form.clabe || null,
+      titular_cuenta: form.titular_cuenta || null,
+    }
     if (editId) {
       const { error } = await ig.updateEmpleado(editId, data)
       if (error) alert('Error al actualizar: ' + error.message)
@@ -95,12 +107,10 @@ export default function Empleados() {
     doc.save('empleados-' + hoy.replace(/\//g, '-') + '.pdf')
   }
 
-  // Filtrar y agrupar por cuadrilla
   const empleadosFiltrados = filtroCuadrilla
     ? ig.empleados.filter(e => e.cuadrilla_id === filtroCuadrilla)
     : ig.empleados
 
-  // Agrupar por cuadrilla — primero los sin cuadrilla al final
   const cuadrillasConEmpleados = db.cuadrillas.filter(c =>
     empleadosFiltrados.some(e => e.cuadrilla_id === c.id)
   )
@@ -123,7 +133,6 @@ export default function Empleados() {
         </div>
       </div>
 
-      {/* Filtro por cuadrilla */}
       <div className="card mb-4" style={{ padding: '12px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <label className="label" style={{ marginBottom: 0, whiteSpace: 'nowrap' }}>Filtrar por cuadrilla:</label>
@@ -161,7 +170,6 @@ export default function Empleados() {
                   const emps = empleadosFiltrados.filter(e => e.cuadrilla_id === cuad.id)
                   const subtotal = emps.filter(e => (e.tipo_pago||'Semanal')==='Semanal').reduce((a, e) => a + Number(e.sueldo_diario) * 6, 0)
                   return [
-                    // Encabezado de cuadrilla
                     <tr key={'header-' + cuad.id} style={{ background: '#0F3460' }}>
                       <td colSpan={8} style={{ padding: '8px 12px', color: '#fff', fontWeight: 500, fontSize: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -170,7 +178,6 @@ export default function Empleados() {
                         </div>
                       </td>
                     </tr>,
-                    // Empleados de la cuadrilla
                     ...emps.map(e => {
                       const tipo = e.tipo_pago || 'Semanal'
                       return (
@@ -194,7 +201,6 @@ export default function Empleados() {
                   ]
                 })}
 
-                {/* Sin cuadrilla asignada */}
                 {sinCuadrilla.length > 0 && [
                   <tr key="header-sin" style={{ background: '#6B7A99' }}>
                     <td colSpan={8} style={{ padding: '8px 12px', color: '#fff', fontWeight: 500, fontSize: 12 }}>
@@ -256,6 +262,22 @@ export default function Empleados() {
             <div><label className="label">Sueldo semanal (6 días)</label><input className="input" readOnly value={sueldoSemanal > 0 ? ig.fmt$(sueldoSemanal) : ''} placeholder="Calculado automático" /></div>
             <div><label className="label">Sueldo quincenal (14 días)</label><input className="input" readOnly value={sueldoQuincenal > 0 ? ig.fmt$(sueldoQuincenal) : ''} placeholder="Calculado automático" /></div>
           </div>
+
+          {/* ── DATOS BANCARIOS ── */}
+          <div style={{ background: 'var(--tc-bg)', border: '1px solid var(--tc-border)', borderRadius: 8, padding: '12px' }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--tc-text-muted)', marginBottom: 10 }}>
+              Datos bancarios <span style={{ fontWeight: 400 }}>(para dispersión de pagos)</span>
+            </div>
+            <div className="form-row c2">
+              <div><label className="label">Banco</label><input className="input" value={form.banco} onChange={setF('banco')} placeholder="BBVA, Banorte..." /></div>
+              <div><label className="label">Titular de la cuenta</label><input className="input" value={form.titular_cuenta} onChange={setF('titular_cuenta')} placeholder="Si es distinto al empleado" /></div>
+            </div>
+            <div className="form-row c2" style={{ marginBottom: 0 }}>
+              <div><label className="label">N° de cuenta</label><input className="input" value={form.cuenta} onChange={setF('cuenta')} placeholder="10 dígitos" /></div>
+              <div><label className="label">CLABE</label><input className="input" value={form.clabe} onChange={setF('clabe')} placeholder="18 dígitos" maxLength={18} /></div>
+            </div>
+          </div>
+
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" className="btn btn-outline" onClick={() => { setModal(false); setEditId(null); setForm(emptyForm) }}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Guardando...' : editId ? 'Actualizar' : 'Guardar'}</button>
