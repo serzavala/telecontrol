@@ -12,6 +12,7 @@ export default function CorteSemanal() {
 
   // Campos de facturación
   const [cifraOficial, setCifraOficial] = useState('')
+  const [anticipo, setAnticipo] = useState('')
   const [comentarios, setComentarios] = useState('')
   const [documento, setDocumento] = useState(null)
 
@@ -28,9 +29,11 @@ export default function CorteSemanal() {
 
   // Cálculos de facturación
   const oficial = parseFloat(cifraOficial) || 0
+  const antic = parseFloat(anticipo) || 0
   const diferencia = oficial - total
-  const iva = oficial * IVA_RATE
-  const totalFacturar = oficial + iva
+  const baseGravable = oficial - antic          // anticipo se resta ANTES del IVA
+  const iva = baseGravable * IVA_RATE           // IVA sobre la base ya descontada
+  const totalFacturar = baseGravable + iva
 
   async function guardarCorte() {
     if (!filtros.inicio || !filtros.fin) { alert('Selecciona el período primero.'); return }
@@ -60,10 +63,11 @@ export default function CorteSemanal() {
       periodo,
       proyecto_nombre: proy,
       proyecto_id: filtros.proyecto_id || null,
-      total,                                    // tu estimado (respaldo)
+      total,                                    // mi estimado (respaldo)
       cifra_oficial: oficial,                   // subtotal cliente
-      iva,                                      // 16%
-      total_facturar: totalFacturar,            // lo que se cobra (con IVA)
+      anticipo: antic,                          // descuento por anticipo
+      iva,                                      // 16% sobre base gravable
+      total_facturar: totalFacturar,            // lo que se cobra (con IVA, menos anticipo)
       comentarios_facturacion: comentarios || null,
       documento_url,
       estado_pago: 'Pendiente',
@@ -74,7 +78,7 @@ export default function CorteSemanal() {
     if (error) { alert('Error al guardar: ' + error.message); return }
     alert('Corte guardado. Visible en Historial de cortes.')
     // Limpiar campos de facturación
-    setCifraOficial(''); setComentarios(''); setDocumento(null)
+    setCifraOficial(''); setAnticipo(''); setComentarios(''); setDocumento(null)
   }
 
   function generarPDF() {
@@ -112,16 +116,20 @@ export default function CorteSemanal() {
           <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="metric"><div className="metric-label">Registros</div><div className="metric-value">{rows.length}</div></div>
             <div className="metric"><div className="metric-label">Cuadrillas</div><div className="metric-value">{cuadsUniq.length}</div></div>
-            <div className="metric"><div className="metric-label">Estimado producción</div><div className="metric-value">{db.fmt$(total)}</div></div>
+            <div className="metric"><div className="metric-label">Mi estimado</div><div className="metric-value">{db.fmt$(total)}</div></div>
           </div>
 
           {/* ── FACTURACIÓN ── */}
           <div className="card mb-4">
             <div className="text-sm font-medium mb-3">Facturación de la semana</div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
-                <label className="label">Cifra oficial del cliente (subtotal) *</label>
+                <label className="label">Total cliente (subtotal) *</label>
                 <input className="input" type="number" min="0" step="0.01" value={cifraOficial} onChange={e => setCifraOficial(e.target.value)} placeholder="0.00" />
+              </div>
+              <div>
+                <label className="label">Anticipo / descuento</label>
+                <input className="input" type="number" min="0" step="0.01" value={anticipo} onChange={e => setAnticipo(e.target.value)} placeholder="0.00" />
               </div>
               <div>
                 <label className="label">Documento del cliente (Excel o captura)</label>
@@ -129,22 +137,25 @@ export default function CorteSemanal() {
               </div>
             </div>
             <div className="mb-3">
-              <label className="label">Comentarios (descuentos, anticipos, camionetas, etc.)</label>
+              <label className="label">Comentarios (concepto del anticipo, notas, etc.)</label>
               <textarea className="input" rows={2} value={comentarios} onChange={e => setComentarios(e.target.value)} />
             </div>
 
             {/* Desglose calculado */}
             <div className="bg-gray-50 rounded-lg p-4 text-sm space-y-2">
-              <div className="flex justify-between"><span className="text-gray-500">Estimado producción</span><span>{db.fmt$(total)}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Cifra oficial (subtotal)</span><span>{db.fmt$(oficial)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Mi estimado registrado</span><span>{db.fmt$(total)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Total cliente (subtotal)</span><span>{db.fmt$(oficial)}</span></div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Diferencia</span>
+                <span className="text-gray-500">Diferencia (cliente − mi estimado)</span>
                 <span className={diferencia >= 0 ? 'text-green-600' : 'text-red-600'}>
                   {diferencia >= 0 ? '+' : ''}{db.fmt$(diferencia)}
                 </span>
               </div>
-              <div className="border-t border-gray-200 pt-2 flex justify-between"><span className="text-gray-500">IVA (16%)</span><span>{db.fmt$(iva)}</span></div>
-              <div className="flex justify-between font-semibold text-base"><span>Total a facturar</span><span>{db.fmt$(totalFacturar)}</span></div>
+              <div className="border-t border-gray-200 pt-2 flex justify-between"><span className="text-gray-500">Subtotal</span><span>{db.fmt$(oficial)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Anticipo / descuento</span><span className="text-red-600">−{db.fmt$(antic)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Base gravable</span><span>{db.fmt$(baseGravable)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">IVA (16%)</span><span>{db.fmt$(iva)}</span></div>
+              <div className="border-t border-gray-200 pt-2 flex justify-between font-semibold text-base"><span>Total a facturar</span><span>{db.fmt$(totalFacturar)}</span></div>
             </div>
           </div>
 
