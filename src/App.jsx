@@ -21,6 +21,7 @@ import NominaPage from './pages/Nomina'
 import Prestamos from './pages/Prestamos'
 import CierresSemanales from './pages/CierresSemanales'
 import Empleados from './pages/Empleados'
+import Dispersion from './pages/Dispersion'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -53,6 +54,7 @@ function AppRoutes() {
         <Route path="prestamos" element={<Prestamos />} />
         <Route path="cierres" element={<CierresSemanales />} />
         <Route path="empleados" element={<Empleados />} />
+        <Route path="dispersion" element={<Dispersion />} />
       </Route>
     </Routes>
   )

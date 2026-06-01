@@ -26,6 +26,7 @@ const navItems = [
   { to: '/prestamos', label: 'Préstamos' },
   { to: '/cierres', label: 'Cierres semanales' },
   { to: '/empleados', label: 'Empleados' },
+  { to: '/dispersion', label: 'Dispersión' },
   { divider: true },
   { section: 'Admin' },
   { to: '/usuarios', label: 'Usuarios' },

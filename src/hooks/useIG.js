@@ -11,6 +11,7 @@ export function useIG() {
   const [nomina, setNomina] = useState([])
   const [prestamos, setPrestamos] = useState([])
   const [cierres, setCierres] = useState([])
+  const [dispersiones, setDispersiones] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -20,7 +21,7 @@ export function useIG() {
     setError(null)
     try {
       // SIN filtro por user_id — todos los usuarios ven los mismos datos
-      const [emp, veh, ing, gas, nom, pre, cie] = await Promise.all([
+      const [emp, veh, ing, gas, nom, pre, cie, dis] = await Promise.all([
         supabase.from('empleados').select('*').eq('activo', true).order('numero'),
         supabase.from('vehiculos').select('*').order('placa'),
         supabase.from('ingresos').select('*').order('fecha', { ascending: false }),
@@ -28,6 +29,7 @@ export function useIG() {
         supabase.from('nomina').select('*').order('semana', { ascending: false }),
         supabase.from('prestamos').select('*').order('created_at', { ascending: false }),
         supabase.from('cierres_semanales').select('*').order('anio', { ascending: false }).order('semana', { ascending: false }),
+        supabase.from('dispersiones').select('*').order('fecha', { ascending: false }),
       ])
       if (emp.error) throw emp.error
       setEmpleados(emp.data || [])
@@ -37,6 +39,7 @@ export function useIG() {
       setNomina(nom.data || [])
       setPrestamos(pre.data || [])
       setCierres(cie.data || [])
+      setDispersiones(dis.data || [])
     } catch (err) {
       console.error('useIG error:', err)
       setError(err.message)
@@ -139,8 +142,41 @@ export function useIG() {
     return { error }
   }
 
+  // ── Dispersiones ──
+  async function addDispersion(cabecera, depositos) {
+    const { data: disp, error: e1 } = await supabase
+      .from('dispersiones')
+      .insert({ ...cabecera, user_id: user.id })
+      .select()
+      .single()
+    if (e1) return { error: e1 }
+
+    const filas = depositos.map(d => ({ ...d, dispersion_id: disp.id }))
+    const { error: e2 } = await supabase.from('dispersion_depositos').insert(filas)
+    if (e2) return { error: e2 }
+
+    load()
+    return { error: null, id: disp.id }
+  }
+
+  async function getDepositos(dispersionId) {
+    const { data, error } = await supabase
+      .from('dispersion_depositos')
+      .select('*')
+      .eq('dispersion_id', dispersionId)
+      .order('created_at')
+    if (error) return []
+    return data || []
+  }
+
+  async function deleteDispersion(id) {
+    const { error } = await supabase.from('dispersiones').delete().eq('id', id)
+    if (!error) load()
+    return { error }
+  }
+
   return {
-    empleados, vehiculos, ingresos, gastos, nomina, prestamos, cierres,
+    empleados, vehiculos, ingresos, gastos, nomina, prestamos, cierres, dispersiones,
     loading, error, reload: load, fmt$, getEmpleado,
     addEmpleado, updateEmpleado, deleteEmpleado,
     addVehiculo, updateVehiculo, deleteVehiculo,
@@ -149,5 +185,6 @@ export function useIG() {
     addNomina, deleteNomina,
     addPrestamo, aplicarDescuento,
     addCierre, updateCierreEstado,
+    addDispersion, getDepositos, deleteDispersion,
   }
 }
