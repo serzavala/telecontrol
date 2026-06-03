@@ -17,7 +17,7 @@ export default function NominaPage() {
   const [form, setForm] = useState({ semana: '', anio: hoy.getFullYear(), cuadrilla_id: '', empleado_id: '', dias_trabajados: '6', sueldo_diario: '', viaticos: '0', anticipo_operativo: '0', descuento_prestamo: '0', fecha_pago: '' })
   const [saving, setSaving] = useState(false)
   const [autoModal, setAutoModal] = useState(false)
-  const [autoForm, setAutoForm] = useState({ semana: '', anio: hoy.getFullYear(), cuadrillas: [], viaticos_modo: 'empleado', viaticos_general: '0' })
+  const [autoForm, setAutoForm] = useState({ semana: '', anio: hoy.getFullYear(), cuadrillas: [], viaticos_modo: 'empleado', viaticos_general: '0', fecha_pago: '' })
   const [autoSaving, setAutoSaving] = useState(false)
   const setF = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
   const setEF = k => e => setEditForm(f => ({ ...f, [k]: e.target.value }))
@@ -224,13 +224,13 @@ export default function NominaPage() {
         anticipo_operativo: 0,
         descuento_prestamo: 0,
         neto_pagar: ss + viaticos,
-        fecha_pago: null,
+        fecha_pago: autoForm.fecha_pago || null,
       })
       if (!error) exitosos++
     }
     setAutoSaving(false)
     setAutoModal(false)
-    setAutoForm({ semana: '', anio: hoy.getFullYear(), cuadrillas: [], viaticos_modo: 'empleado', viaticos_general: '0' })
+    setAutoForm({ semana: '', anio: hoy.getFullYear(), cuadrillas: [], viaticos_modo: 'empleado', viaticos_general: '0', fecha_pago: '' })
     alert(`Nómina generada: ${exitosos} registros creados correctamente.`)
   }
 
@@ -458,7 +458,7 @@ export default function NominaPage() {
           <div style={{ background: '#E8F0FB', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#1A4FA0' }}>
             Se generarán 6 días para todos los empleados de las cuadrillas seleccionadas. Si ya existe nómina para algún empleado en esa semana se omitirá automáticamente.
           </div>
-          <div className="form-row c2">
+            <div className="form-row c3">
             <div><label className="label">Semana # *</label>
               <input className="input" type="number" min="1" max="52" placeholder="19" value={autoForm.semana}
                 onChange={e => setAutoForm(f => ({ ...f, semana: e.target.value }))} />
@@ -466,6 +466,10 @@ export default function NominaPage() {
             <div><label className="label">Año</label>
               <input className="input" type="number" value={autoForm.anio}
                 onChange={e => setAutoForm(f => ({ ...f, anio: e.target.value }))} />
+            </div>
+            <div><label className="label">Fecha de pago</label>
+              <input className="input" type="date" value={autoForm.fecha_pago}
+                onChange={e => setAutoForm(f => ({ ...f, fecha_pago: e.target.value }))} />
             </div>
           </div>
           <div>
