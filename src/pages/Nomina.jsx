@@ -9,7 +9,7 @@ export default function NominaPage() {
   const ig = useIG()
   const db = useDB()
   const hoy = new Date()
-  const [filtros, setFiltros] = useState({ semana: '', anio: hoy.getFullYear(), cuadrilla_id: '' })
+  const [filtros, setFiltros] = useState({ semana: '', anio: hoy.getFullYear(), cuadrillas: [] })
   const [modal, setModal] = useState(false)
   const [editModal, setEditModal] = useState(false)
   const [editRow, setEditRow] = useState(null)
@@ -26,7 +26,7 @@ export default function NominaPage() {
   const rows = ig.nomina.filter(r =>
     (!filtros.semana || r.semana == filtros.semana) &&
     (!filtros.anio || r.anio == filtros.anio) &&
-    (!filtros.cuadrilla_id || r.cuadrilla_id === filtros.cuadrilla_id)
+    (!filtros.cuadrillas.length || filtros.cuadrillas.includes(r.cuadrilla_id))
   )
 
   const totalSueldos = rows.reduce((a, r) => a + Number(r.sueldo_semana), 0)
@@ -253,20 +253,40 @@ export default function NominaPage() {
       </div>
 
       <div className="card mb-4">
-        <div className="form-row c3" style={{ marginBottom: 0 }}>
+        <div className="form-row c2" style={{ marginBottom: 12 }}>
           <div><label className="label">Semana</label><input className="input" type="number" placeholder="Todas" value={filtros.semana} onChange={setFilt('semana')} /></div>
           <div><label className="label">Año</label><input className="input" type="number" value={filtros.anio} onChange={setFilt('anio')} /></div>
-          <div><label className="label">Cuadrilla</label>
-            <select className="input" value={filtros.cuadrilla_id} onChange={setFilt('cuadrilla_id')}>
-              <option value="">Todas</option>
-              {db.cuadrillas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
+        </div>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <label className="label" style={{ marginBottom: 0 }}>Cuadrillas (selecciona una o varias)</label>
+            {filtros.cuadrillas.length > 0 && (
+              <button className="btn btn-outline btn-sm" onClick={() => setFiltros(f => ({ ...f, cuadrillas: [] }))}>Ver todas</button>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            {db.cuadrillas.map(c => (
+              <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: 'var(--tc-text)' }}>
+                <input type="checkbox" style={{ width: 'auto' }}
+                  checked={filtros.cuadrillas.includes(c.id)}
+                  onChange={e => setFiltros(f => ({
+                    ...f,
+                    cuadrillas: e.target.checked ? [...f.cuadrillas, c.id] : f.cuadrillas.filter(id => id !== c.id)
+                  }))} />
+                {c.nombre}
+              </label>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--tc-text-muted)', marginTop: 8 }}>
+            {filtros.cuadrillas.length === 0
+              ? 'Mostrando todas las cuadrillas'
+              : `${filtros.cuadrillas.length} cuadrilla${filtros.cuadrillas.length !== 1 ? 's' : ''} seleccionada${filtros.cuadrillas.length !== 1 ? 's' : ''}`}
           </div>
         </div>
       </div>
 
       <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(5,minmax(0,1fr))' }}>
-        <div className="metric metric-light"><div className="metric-label">Empleados</div><div className="metric-value" style={{ color: '#0F3460' }}>{rows.length}</div></div>
+        <div className="metric metric-light"><div className="metric-label">Empleados</div><div className="metric-value" style={{ color: 'var(--tc-text)' }}>{rows.length}</div></div>
         <div className="metric metric-light"><div className="metric-label">Total sueldos</div><div className="metric-value" style={{ color: '#A82020' }}>{ig.fmt$(totalSueldos)}</div></div>
         <div className="metric metric-light"><div className="metric-label">Total viáticos</div><div className="metric-value" style={{ color: '#946200' }}>{ig.fmt$(totalViaticos)}</div></div>
         <div className="metric metric-gold"><div className="metric-label">Desc. préstamos</div><div className="metric-value">{ig.fmt$(totalDescuentos)}</div></div>
@@ -312,7 +332,7 @@ export default function NominaPage() {
                       <td className="td" style={{ textAlign: 'right' }}>{ig.fmt$(r.viaticos)}</td>
                       <td className="td" style={{ textAlign: 'right', color: '#1A4FA0' }}>{r.anticipo_operativo > 0 ? ig.fmt$(r.anticipo_operativo) : <span style={{ color: '#A0AABB' }}>—</span>}</td>
                       <td className="td" style={{ textAlign: 'right', color: '#A82020' }}>{r.descuento_prestamo > 0 ? `-${ig.fmt$(r.descuento_prestamo)}` : <span style={{ color: '#A0AABB' }}>—</span>}</td>
-                      <td className="td" style={{ textAlign: 'right', fontWeight: 500, color: '#0F3460' }}>{ig.fmt$(r.neto_pagar)}</td>
+                      <td className="td" style={{ textAlign: 'right', fontWeight: 500, color: 'var(--tc-text)' }}>{ig.fmt$(r.neto_pagar)}</td>
                       <td className="td">
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button className="btn btn-outline btn-sm" onClick={() => openEdit(r)}>Editar</button>
@@ -329,33 +349,33 @@ export default function NominaPage() {
       </div>
 
       {rows.length > 0 && (
-        <div style={{ background: '#fff', border: '1px solid #E8ECF4', borderRadius: 12, padding: '1rem 1.25rem', marginTop: '1rem' }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: '#0F3460', marginBottom: 10 }}>Resumen total — Semana {filtros.semana || '—'}, {filtros.anio}</div>
+        <div style={{ background: 'var(--tc-surface)', border: '1px solid var(--tc-border)', borderRadius: 12, padding: '1rem 1.25rem', marginTop: '1rem' }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--tc-text)', marginBottom: 10 }}>Resumen total — Semana {filtros.semana || '—'}, {filtros.anio}</div>
           {[
             { label: 'Total sueldos', val: ig.fmt$(totalSueldos), color: '#A82020' },
             { label: 'Total viáticos', val: ig.fmt$(totalViaticos), color: '#A82020' },
             { label: 'Anticipos operativos', val: ig.fmt$(rows.reduce((a,r)=>a+Number(r.anticipo_operativo),0)), color: '#1A4FA0' },
             { label: 'Descuentos préstamos', val: '+' + ig.fmt$(totalDescuentos), color: '#1A7A45' },
           ].map(({ label, val, color }) => (
-            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #F0F3FA', fontSize: 13 }}>
-              <span style={{ color: '#6B7A99' }}>{label}</span><span style={{ color }}>{val}</span>
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--tc-border)', fontSize: 13 }}>
+              <span style={{ color: 'var(--tc-text-muted)' }}>{label}</span><span style={{ color }}>{val}</span>
             </div>
           ))}
-          <div style={{ borderTop: '1px solid #E8ECF4', marginTop: 6, paddingTop: 4 }} />
-          <div style={{ fontSize: 12, fontWeight: 500, color: '#6B7A99', margin: '8px 0 6px' }}>Gastos fijos y variables de la semana</div>
+          <div style={{ borderTop: '1px solid var(--tc-border)', marginTop: 6, paddingTop: 4 }} />
+          <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--tc-text-muted)', margin: '8px 0 6px' }}>Gastos fijos y variables de la semana</div>
           {gastosSemana.length === 0
             ? <div style={{ fontSize: 12, color: '#A0AABB', marginBottom: 8 }}>Sin gastos registrados esta semana.</div>
             : [...new Set(gastosSemana.map(r => r.categoria))].map(cat => {
                 const subtotal = gastosSemana.filter(r => r.categoria === cat).reduce((a, r) => a + Number(r.monto), 0)
                 return (
-                  <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #F0F3FA', fontSize: 13 }}>
-                    <span style={{ color: '#6B7A99' }}>{cat}</span><span style={{ color: '#A82020' }}>{ig.fmt$(subtotal)}</span>
+                  <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--tc-border)', fontSize: 13 }}>
+                    <span style={{ color: 'var(--tc-text-muted)' }}>{cat}</span><span style={{ color: '#A82020' }}>{ig.fmt$(subtotal)}</span>
                   </div>
                 )
               })
           }
-          <div style={{ borderTop: '1px solid #E8ECF4', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 500 }}>
-            <span style={{ color: '#2D3A5A' }}>Total egresos de la semana</span>
+          <div style={{ borderTop: '1px solid var(--tc-border)', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 500 }}>
+            <span style={{ color: 'var(--tc-text)' }}>Total egresos de la semana</span>
             <span style={{ color: '#A82020' }}>{ig.fmt$(totalNeto + totalGastos)}</span>
           </div>
         </div>
@@ -389,8 +409,8 @@ export default function NominaPage() {
             <div><label className="label">Viáticos ($)</label><input className="input" type="number" min="0" step="100" value={form.viaticos} onChange={setF('viaticos')} /></div>
             <div><label className="label">Anticipo operativo ($)</label><input className="input" type="number" min="0" step="100" value={form.anticipo_operativo} onChange={setF('anticipo_operativo')} /></div>
           </div>
-          <div style={{ background: '#F4F6FB', borderRadius: 8, padding: '10px 12px' }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#6B7A99', marginBottom: 6 }}>Descuento de préstamo personal</div>
+          <div style={{ background: 'var(--tc-bg)', borderRadius: 8, padding: '10px 12px' }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--tc-text-muted)', marginBottom: 6 }}>Descuento de préstamo personal</div>
             {form.empleado_id && ig.prestamos.filter(p => p.empleado_id === form.empleado_id && p.estado === 'Activo').length > 0 ? (
               ig.prestamos.filter(p => p.empleado_id === form.empleado_id && p.estado === 'Activo').map(p => (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -404,12 +424,12 @@ export default function NominaPage() {
               ))
             ) : <div style={{ fontSize: 12, color: '#A0AABB' }}>{form.empleado_id ? 'Sin préstamos activos.' : 'Selecciona un empleado primero.'}</div>}
           </div>
-          <div style={{ background: '#fff', border: '1px solid #E8ECF4', borderRadius: 8, padding: '10px 12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}><span style={{ color: '#6B7A99' }}>Sueldo + viáticos</span><span>{ig.fmt$(sueldoSemana + (parseFloat(form.viaticos) || 0))}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}><span style={{ color: '#6B7A99' }}>+ Anticipo operativo</span><span style={{ color: '#1A4FA0' }}>+{ig.fmt$(parseFloat(form.anticipo_operativo) || 0)}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}><span style={{ color: '#6B7A99' }}>- Descuento préstamo</span><span style={{ color: '#A82020' }}>-{ig.fmt$(parseFloat(form.descuento_prestamo) || 0)}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 500, borderTop: '1px solid #E8ECF4', paddingTop: 6 }}>
-              <span>Neto a pagar</span><span style={{ color: '#0F3460' }}>{ig.fmt$(neto)}</span>
+          <div style={{ background: 'var(--tc-surface)', border: '1px solid var(--tc-border)', borderRadius: 8, padding: '10px 12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}><span style={{ color: 'var(--tc-text-muted)' }}>Sueldo + viáticos</span><span>{ig.fmt$(sueldoSemana + (parseFloat(form.viaticos) || 0))}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}><span style={{ color: 'var(--tc-text-muted)' }}>+ Anticipo operativo</span><span style={{ color: '#1A4FA0' }}>+{ig.fmt$(parseFloat(form.anticipo_operativo) || 0)}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}><span style={{ color: 'var(--tc-text-muted)' }}>- Descuento préstamo</span><span style={{ color: '#A82020' }}>-{ig.fmt$(parseFloat(form.descuento_prestamo) || 0)}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 500, borderTop: '1px solid var(--tc-border)', paddingTop: 6 }}>
+              <span>Neto a pagar</span><span style={{ color: 'var(--tc-text)' }}>{ig.fmt$(neto)}</span>
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-1">
@@ -423,9 +443,9 @@ export default function NominaPage() {
       <Modal open={editModal} onClose={() => setEditModal(false)} title="Editar registro de nómina">
         {editRow && (
           <form onSubmit={handleEdit} className="space-y-3">
-            <div style={{ background: '#F4F6FB', borderRadius: 8, padding: '10px 12px', fontSize: 13 }}>
-              <div style={{ fontWeight: 500, color: '#0F3460' }}>{ig.getEmpleado(editRow.empleado_id).nombre}</div>
-              <div style={{ fontSize: 12, color: '#6B7A99' }}>Sem {editRow.semana} · S.Diario: {ig.fmt$(editRow.sueldo_diario)}</div>
+            <div style={{ background: 'var(--tc-bg)', borderRadius: 8, padding: '10px 12px', fontSize: 13 }}>
+              <div style={{ fontWeight: 500, color: 'var(--tc-text)' }}>{ig.getEmpleado(editRow.empleado_id).nombre}</div>
+              <div style={{ fontSize: 12, color: 'var(--tc-text-muted)' }}>Sem {editRow.semana} · S.Diario: {ig.fmt$(editRow.sueldo_diario)}</div>
             </div>
             <div className="form-row c2">
               <div><label className="label">Días trabajados</label><input className="input" type="number" min="0" max="14" step="0.5" value={editForm.dias_trabajados} onChange={setEF('dias_trabajados')} /></div>
@@ -439,9 +459,9 @@ export default function NominaPage() {
               <div><label className="label">Descuento préstamo ($)</label><input className="input" type="number" min="0" step="100" value={editForm.descuento_prestamo} onChange={setEF('descuento_prestamo')} /></div>
               <div><label className="label">Fecha de pago</label><input className="input" type="date" value={editForm.fecha_pago} onChange={setEF('fecha_pago')} /></div>
             </div>
-            <div style={{ background: '#fff', border: '1px solid #E8ECF4', borderRadius: 8, padding: '10px 12px' }}>
+            <div style={{ background: 'var(--tc-surface)', border: '1px solid var(--tc-border)', borderRadius: 8, padding: '10px 12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 500 }}>
-                <span>Neto a pagar</span><span style={{ color: '#0F3460' }}>{ig.fmt$(editNeto)}</span>
+                <span>Neto a pagar</span><span style={{ color: 'var(--tc-text)' }}>{ig.fmt$(editNeto)}</span>
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-1">
@@ -476,7 +496,7 @@ export default function NominaPage() {
             <label className="label">Cuadrillas a incluir *</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
               {db.cuadrillas.map(c => (
-                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', color: 'var(--tc-text)' }}>
                   <input type="checkbox" style={{ width: 'auto' }}
                     checked={autoForm.cuadrillas.includes(c.id)}
                     onChange={e => setAutoForm(f => ({
@@ -502,8 +522,8 @@ export default function NominaPage() {
                 onChange={e => setAutoForm(f => ({ ...f, viaticos_general: e.target.value }))} />
             </div>
           )}
-          <div style={{ background: '#F4F6FB', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#6B7A99' }}>
-            Empleados a registrar: <strong style={{ color: '#0F3460' }}>
+          <div style={{ background: 'var(--tc-bg)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: 'var(--tc-text-muted)' }}>
+            Empleados a registrar: <strong style={{ color: 'var(--tc-text)' }}>
               {ig.empleados.filter(e => autoForm.cuadrillas.includes(e.cuadrilla_id)).length}
             </strong>
           </div>
