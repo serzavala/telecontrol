@@ -10,9 +10,27 @@ export default function CierresSemanales() {
   const [form, setForm] = useState({ semana: '', anio: hoy.getFullYear(), genPDF: true, cerrar: false })
   const [saving, setSaving] = useState(false)
 
+  // Socios
+  const [sociosModal, setSociosModal] = useState(false)
+  const [socioForm, setSocioForm] = useState({ nombre: '', porcentaje: '' })
+  const [editSocio, setEditSocio] = useState(null)
+  const [savingSocio, setSavingSocio] = useState(false)
+
   const totalCobrado = ig.cierres.reduce((a, c) => a + Number(c.total_ingresos), 0)
   const totalEgresos = ig.cierres.reduce((a, c) => a + Number(c.total_nomina) + Number(c.total_gastos), 0)
   const totalUtilidad = ig.cierres.reduce((a, c) => a + Number(c.utilidad_neta), 0)
+
+  const totalPorcentaje = ig.socios.reduce((a, s) => a + Number(s.porcentaje), 0)
+  const porcentajeValido = Math.abs(totalPorcentaje - 100) < 0.01
+
+  function calcularDistribucion(utilidad) {
+    return ig.socios.map(s => ({
+      socio_id: s.id,
+      nombre: s.nombre,
+      porcentaje: Number(s.porcentaje),
+      monto: (utilidad * Number(s.porcentaje)) / 100,
+    }))
+  }
 
   function calcularSemana() {
     const sem = parseInt(form.semana)
@@ -34,7 +52,13 @@ export default function CierresSemanales() {
     e.preventDefault()
     const calc = calcularSemana()
     if (!calc) { alert('Ingresa semana y año.'); return }
+    if (!porcentajeValido && ig.socios.length > 0) {
+      if (!confirm(`Los porcentajes de socios suman ${totalPorcentaje}% (deben ser 100%). ¿Guardar sin distribución?`)) return
+    }
     setSaving(true)
+    const distribucion = porcentajeValido && ig.socios.length > 0
+      ? calcularDistribucion(calc.utilidad)
+      : null
     await ig.addCierre({
       semana: parseInt(form.semana), anio: parseInt(form.anio),
       periodo_label: `Semana ${form.semana} — ${form.anio}`,
@@ -48,9 +72,29 @@ export default function CierresSemanales() {
       num_cuadrillas: calc.numCuadrillas,
       estado: form.cerrar ? 'Cerrado' : 'Abierto',
       fecha_cierre: form.cerrar ? hoy.toISOString().split('T')[0] : null,
+      distribucion,
     })
     setSaving(false)
     setModal(false)
+  }
+
+  // ── Socios CRUD ──
+  async function handleSaveSocio(e) {
+    e.preventDefault()
+    setSavingSocio(true)
+    if (editSocio) {
+      await ig.updateSocio(editSocio.id, { nombre: socioForm.nombre, porcentaje: parseFloat(socioForm.porcentaje) })
+    } else {
+      await ig.addSocio({ nombre: socioForm.nombre, porcentaje: parseFloat(socioForm.porcentaje) })
+    }
+    setSavingSocio(false)
+    setEditSocio(null)
+    setSocioForm({ nombre: '', porcentaje: '' })
+  }
+
+  function abrirEditSocio(s) {
+    setEditSocio(s)
+    setSocioForm({ nombre: s.nombre, porcentaje: s.porcentaje })
   }
 
   const calc = calcularSemana()
@@ -58,12 +102,15 @@ export default function CierresSemanales() {
   return (
     <div>
       <div className="page-header">
-        <div><h2>Cierres semanales</h2><div className="page-header-sub">Nómina + gastos guardados por semana · PDF con logo NOVUS</div></div>
-        <button className="btn btn-gold" onClick={() => setModal(true)}>+ Generar cierre</button>
+        <div><h2>Cierres semanales</h2><div className="page-header-sub">Nómina + gastos guardados por semana</div></div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-outline" onClick={() => setSociosModal(true)}>⚙ Socios</button>
+          <button className="btn btn-gold" onClick={() => setModal(true)}>+ Generar cierre</button>
+        </div>
       </div>
 
-      <div style={{ background: '#E8F0FB', borderLeft: '3px solid #378ADD', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#1A4FA0', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span>Cada cierre consolida nómina + gastos de la semana, calcula la utilidad neta y genera PDF con logo NOVUS.</span>
+      <div style={{ background: '#E8F0FB', borderLeft: '3px solid #378ADD', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#1A4FA0', marginBottom: '1rem' }}>
+        Cada cierre consolida nómina + gastos de la semana y calcula la utilidad neta con distribución entre socios.
       </div>
 
       <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(4,minmax(0,1fr))' }}>
@@ -88,10 +135,10 @@ export default function CierresSemanales() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className={`badge ${c.estado === 'Cerrado' ? 'badge-green' : 'badge-amber'}`}>{c.estado}</span>
-              <button className="btn btn-sm" style={{ background: '#0F3460', color: '#fff', border: 'none' }}
-                onClick={ev => { ev.stopPropagation(); alert(`Generaría PDF — ${c.periodo_label}`) }}>PDF</button>
             </div>
           </div>
+
+          {/* Resumen financiero */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginTop: 10, background: '#F8FAFF', borderRadius: 6, padding: '8px 12px' }}>
             {[
               { label: 'Ingresos', val: ig.fmt$(c.total_ingresos), color: '#1A7A45' },
@@ -105,10 +152,25 @@ export default function CierresSemanales() {
               </div>
             ))}
           </div>
+
+          {/* Distribución de socios */}
+          {c.distribucion && c.distribucion.length > 0 && (
+            <div style={{ marginTop: 8, background: '#F4F6FB', borderRadius: 6, padding: '8px 12px' }}>
+              <div style={{ fontSize: 11, color: '#6B7A99', marginBottom: 6, fontWeight: 500 }}>Distribución de utilidad</div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${c.distribucion.length}, 1fr)`, gap: 8 }}>
+                {c.distribucion.map((d, i) => (
+                  <div key={i} style={{ fontSize: 12 }}>
+                    <div style={{ color: '#6B7A99', marginBottom: 2 }}>{d.nombre} <span style={{ color: '#F5A623' }}>{d.porcentaje}%</span></div>
+                    <div style={{ fontWeight: 500, color: '#1A7A45' }}>{ig.fmt$(d.monto)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )) : <div className="card" style={{ textAlign: 'center', color: '#A0AABB', padding: '2rem' }}>Sin cierres guardados aún. Genera el primero.</div>}
 
-      {/* Modal generar cierre */}
+      {/* ── Modal generar cierre ── */}
       <Modal open={modal} onClose={() => setModal(false)} title="Generar cierre semanal">
         <form onSubmit={handleGuardar} className="space-y-3">
           <div style={{ background: '#FFF3DC', borderLeft: '3px solid #F5A623', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#946200' }}>
@@ -136,6 +198,25 @@ export default function CierresSemanales() {
                   <span>Utilidad neta</span>
                   <span style={{ color: calc.utilidad >= 0 ? '#0F3460' : '#A82020' }}>{ig.fmt$(calc.utilidad)}</span>
                 </div>
+
+                {/* Preview distribución */}
+                {ig.socios.length > 0 && porcentajeValido && (
+                  <div style={{ marginTop: 10, borderTop: '1px solid #E8ECF4', paddingTop: 8 }}>
+                    <div style={{ fontSize: 11, color: '#6B7A99', fontWeight: 500, marginBottom: 6 }}>Distribución entre socios</div>
+                    {calcularDistribucion(calc.utilidad).map((d, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '3px 0' }}>
+                        <span style={{ color: '#6B7A99' }}>{d.nombre} <span style={{ color: '#F5A623' }}>({d.porcentaje}%)</span></span>
+                        <span style={{ fontWeight: 500, color: '#1A7A45' }}>{ig.fmt$(d.monto)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {ig.socios.length === 0 && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: '#946200' }}>⚠ No hay socios configurados. Ve a ⚙ Socios para agregarlos.</div>
+                )}
+                {ig.socios.length > 0 && !porcentajeValido && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: '#A82020' }}>⚠ Los porcentajes suman {totalPorcentaje}% — deben sumar 100% para calcular distribución.</div>
+                )}
               </div>
             </div>
           )}
@@ -158,29 +239,92 @@ export default function CierresSemanales() {
         </form>
       </Modal>
 
-      {/* Modal ver cierre */}
+      {/* ── Modal socios ── */}
+      <Modal open={sociosModal} onClose={() => { setSociosModal(false); setEditSocio(null); setSocioForm({ nombre: '', porcentaje: '' }) }} title="⚙ Configuración de socios">
+        <div className="space-y-3">
+          {/* Lista de socios */}
+          {ig.socios.length > 0 ? (
+            <div style={{ border: '1px solid #E8ECF4', borderRadius: 8, overflow: 'hidden' }}>
+              {ig.socios.map((s, i) => (
+                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: i < ig.socios.length - 1 ? '1px solid #F0F3FA' : 'none' }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: '#0F3460' }}>{s.nombre}</div>
+                    <div style={{ fontSize: 12, color: '#6B7A99' }}>{s.porcentaje}%</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-outline btn-sm" onClick={() => abrirEditSocio(s)}>Editar</button>
+                    <button className="btn btn-outline btn-sm" style={{ color: '#A82020' }} onClick={() => { if (confirm(`¿Eliminar a ${s.nombre}?`)) ig.deleteSocio(s.id) }}>Eliminar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: '#A0AABB', textAlign: 'center', padding: '1rem' }}>Sin socios configurados aún.</div>
+          )}
+
+          {/* Indicador de total */}
+          {ig.socios.length > 0 && (
+            <div style={{ background: porcentajeValido ? '#E6F6EE' : '#FFF3DC', border: `1px solid ${porcentajeValido ? '#2ECC71' : '#F5A623'}`, borderRadius: 8, padding: '8px 12px', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: '#6B7A99' }}>Total porcentajes</span>
+              <strong style={{ color: porcentajeValido ? '#1A7A45' : '#946200' }}>{totalPorcentaje}% {porcentajeValido ? '✓' : `— faltan ${(100 - totalPorcentaje).toFixed(2)}%`}</strong>
+            </div>
+          )}
+
+          {/* Formulario agregar/editar */}
+          <div style={{ background: '#F4F6FB', borderRadius: 8, padding: '12px' }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#6B7A99', marginBottom: 8 }}>{editSocio ? `Editando: ${editSocio.nombre}` : 'Agregar socio'}</div>
+            <form onSubmit={handleSaveSocio} className="space-y-2">
+              <div className="form-row c2">
+                <div><label className="label">Nombre *</label><input className="input" value={socioForm.nombre} onChange={e => setSocioForm(f => ({ ...f, nombre: e.target.value }))} required /></div>
+                <div><label className="label">Porcentaje % *</label><input className="input" type="number" min="0.01" max="100" step="0.01" value={socioForm.porcentaje} onChange={e => setSocioForm(f => ({ ...f, porcentaje: e.target.value }))} required /></div>
+              </div>
+              <div className="flex justify-end gap-2">
+                {editSocio && <button type="button" className="btn btn-outline btn-sm" onClick={() => { setEditSocio(null); setSocioForm({ nombre: '', porcentaje: '' }) }}>Cancelar</button>}
+                <button type="submit" className="btn btn-primary btn-sm" disabled={savingSocio}>{savingSocio ? 'Guardando...' : editSocio ? 'Actualizar' : 'Agregar'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Modal ver cierre ── */}
       {verModal && (
         <Modal open={!!verModal} onClose={() => setVerModal(null)} title={verModal.periodo_label}>
-          <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
-            <div className="metric metric-primary"><div className="metric-label">Ingresos</div><div className="metric-value">{ig.fmt$(verModal.total_ingresos)}</div></div>
-            <div className="metric metric-gold"><div className="metric-label">Utilidad neta</div><div className="metric-value">{ig.fmt$(verModal.utilidad_neta)}</div></div>
-          </div>
-          {[
-            { label: 'Nómina total', val: ig.fmt$(verModal.total_nomina) },
-            { label: 'Gastos operativos', val: ig.fmt$(verModal.total_gastos) },
-            { label: 'Empleados pagados', val: verModal.num_empleados },
-            { label: 'Cuadrillas activas', val: verModal.num_cuadrillas },
-            { label: 'Margen de utilidad', val: verModal.total_ingresos > 0 ? Math.round(verModal.utilidad_neta / verModal.total_ingresos * 100) + '%' : '—' },
-            { label: 'Estado', val: verModal.estado },
-          ].map(({ label, val }) => (
-            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F0F3FA', fontSize: 13 }}>
-              <span style={{ color: '#6B7A99' }}>{label}</span><span style={{ fontWeight: 500 }}>{val}</span>
+          <div className="space-y-3">
+            <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+              <div className="metric metric-primary"><div className="metric-label">Ingresos</div><div className="metric-value">{ig.fmt$(verModal.total_ingresos)}</div></div>
+              <div className="metric metric-gold"><div className="metric-label">Utilidad neta</div><div className="metric-value">{ig.fmt$(verModal.utilidad_neta)}</div></div>
             </div>
-          ))}
-          <div className="flex justify-end gap-2 mt-4">
-            <button className="btn btn-outline" onClick={() => setVerModal(null)}>Cerrar</button>
-            <button className="btn" style={{ background: '#0F3460', color: '#fff', border: 'none' }} onClick={() => alert(`PDF — ${verModal.periodo_label}`)}>Descargar PDF</button>
-            {verModal.estado === 'Abierto' && <button className="btn btn-gold" onClick={() => { ig.updateCierreEstado(verModal.id, 'Cerrado'); setVerModal(null) }}>Marcar cerrado</button>}
+            {[
+              { label: 'Nómina total', val: ig.fmt$(verModal.total_nomina) },
+              { label: 'Gastos operativos', val: ig.fmt$(verModal.total_gastos) },
+              { label: 'Empleados pagados', val: verModal.num_empleados },
+              { label: 'Cuadrillas activas', val: verModal.num_cuadrillas },
+              { label: 'Margen de utilidad', val: verModal.total_ingresos > 0 ? Math.round(verModal.utilidad_neta / verModal.total_ingresos * 100) + '%' : '—' },
+              { label: 'Estado', val: verModal.estado },
+            ].map(({ label, val }) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F0F3FA', fontSize: 13 }}>
+                <span style={{ color: '#6B7A99' }}>{label}</span><span style={{ fontWeight: 500 }}>{val}</span>
+              </div>
+            ))}
+
+            {/* Distribución en detalle */}
+            {verModal.distribucion && verModal.distribucion.length > 0 && (
+              <div style={{ border: '1px solid #E8ECF4', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ padding: '8px 12px', background: '#F4F6FB', fontSize: 12, fontWeight: 500, color: '#6B7A99' }}>Distribución de utilidad</div>
+                {verModal.distribucion.map((d, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', borderBottom: i < verModal.distribucion.length - 1 ? '1px solid #F0F3FA' : 'none', fontSize: 13 }}>
+                    <span style={{ color: '#6B7A99' }}>{d.nombre} <span style={{ color: '#F5A623', fontWeight: 500 }}>{d.porcentaje}%</span></span>
+                    <span style={{ fontWeight: 500, color: '#1A7A45' }}>{ig.fmt$(d.monto)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button className="btn btn-outline" onClick={() => setVerModal(null)}>Cerrar</button>
+              {verModal.estado === 'Abierto' && <button className="btn btn-gold" onClick={() => { ig.updateCierreEstado(verModal.id, 'Cerrado'); setVerModal(null) }}>Marcar cerrado</button>}
+            </div>
           </div>
         </Modal>
       )}
