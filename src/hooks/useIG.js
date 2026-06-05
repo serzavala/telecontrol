@@ -12,6 +12,7 @@ export function useIG() {
   const [prestamos, setPrestamos] = useState([])
   const [cierres, setCierres] = useState([])
   const [dispersiones, setDispersiones] = useState([])
+  const [socios, setSocios] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -20,31 +21,33 @@ export function useIG() {
     setLoading(true)
     setError(null)
     try {
-      const [emp, veh, ing, gas, nom, pre, cie, dis] = await Promise.all([
-        supabase.from('empleados').select('*').eq('activo', true).order('numero'),
-        supabase.from('vehiculos').select('*').order('placa'),
-        supabase.from('ingresos').select('*').order('fecha', { ascending: false }),
-        supabase.from('gastos').select('*').order('fecha', { ascending: false }),
-        supabase.from('nomina').select('*').order('semana', { ascending: false }),
-        supabase.from('prestamos').select('*').order('created_at', { ascending: false }),
-        supabase.from('cierres_semanales').select('*').order('anio', { ascending: false }).order('semana', { ascending: false }),
-        supabase.from('dispersiones').select('*').order('fecha', { ascending: false }),
-      ])
-      if (emp.error) throw emp.error
-      setEmpleados(emp.data || [])
-      setVehiculos(veh.data || [])
-      setIngresos(ing.data || [])
-      setGastos(gas.data || [])
-      setNomina(nom.data || [])
-      setPrestamos(pre.data || [])
-      setCierres(cie.data || [])
-      setDispersiones(dis.data || [])
-    } catch (err) {
-      console.error('useIG error:', err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+  const [emp, veh, ing, gas, nom, pre, cie, dis, soc] = await Promise.all([
+    supabase.from('empleados').select('*').eq('activo', true).order('numero'),
+    supabase.from('vehiculos').select('*').order('placa'),
+    supabase.from('ingresos').select('*').order('fecha', { ascending: false }),
+    supabase.from('gastos').select('*').order('fecha', { ascending: false }),
+    supabase.from('nomina').select('*').order('semana', { ascending: false }),
+    supabase.from('prestamos').select('*').order('created_at', { ascending: false }),
+    supabase.from('cierres_semanales').select('*').order('anio', { ascending: false }).order('semana', { ascending: false }),
+    supabase.from('dispersiones').select('*').order('fecha', { ascending: false }),
+    supabase.from('socios').select('*').order('created_at'),
+  ])
+  if (emp.error) throw emp.error
+  setEmpleados(emp.data || [])
+  setVehiculos(veh.data || [])
+  setIngresos(ing.data || [])
+  setGastos(gas.data || [])
+  setNomina(nom.data || [])
+  setPrestamos(pre.data || [])
+  setCierres(cie.data || [])
+  setDispersiones(dis.data || [])
+  setSocios(soc.data || [])
+} catch (err) {
+  console.error('useIG error:', err)
+  setError(err.message)
+} finally {
+  setLoading(false)
+}
   }, [user])
 
   useEffect(() => { load() }, [load])
@@ -167,6 +170,26 @@ export function useIG() {
     if (!error) load()
     return { error }
   }
+  async function addSocio(data) {
+  const { error } = await supabase.from('socios').insert({ ...data, user_id: user.id })
+  if (!error) load()
+  return { error }
+}
+async function updateSocio(id, data) {
+  const { error } = await supabase.from('socios').update(data).eq('id', id)
+  if (!error) load()
+  return { error }
+}
+async function deleteSocio(id) {
+  const { error } = await supabase.from('socios').delete().eq('id', id)
+  if (!error) load()
+  return { error }
+}
+async function updateCierreDistribucion(id, distribucion) {
+  const { error } = await supabase.from('cierres_semanales').update({ distribucion }).eq('id', id)
+  if (!error) load()
+  return { error }
+}
 
   return {
     empleados, vehiculos, ingresos, gastos, nomina, prestamos, cierres, dispersiones,
@@ -178,6 +201,8 @@ export function useIG() {
     addNomina, deleteNomina,
     addPrestamo, aplicarDescuento,
     addCierre, updateCierreEstado,
-    addDispersion, getDepositos, deleteDispersion,
+     addDispersion, getDepositos, deleteDispersion,
+    socios, addSocio, updateSocio, deleteSocio,
+    updateCierreDistribucion,
   }
 }
