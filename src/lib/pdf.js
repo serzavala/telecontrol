@@ -113,32 +113,78 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
   // Bloque de facturación (solo si hay cifra oficial)
   if (oficial > 0) {
     const pageW = doc.internal.pageSize.getWidth()
-    let y = doc.lastAutoTable.finalY + 8
+    const pageH = doc.internal.pageSize.getHeight()
+    const boxX = 12
+    const boxW = pageW - 24
+    const boxY = pageH - 62  // encima del footer
+    const rowH = 7
+
+    // Fondo del recuadro
+    doc.setFillColor(240, 245, 255)
     doc.setDrawColor(15, 52, 96)
     doc.setLineWidth(0.4)
-    doc.line(12, y, pageW - 12, y)
-    y += 5
+    doc.roundedRect(boxX, boxY, boxW, 50, 2, 2, 'FD')
 
-    const col1 = 12, col2 = 90, col3 = 165, col4 = 220
-    const facRows = [
-      ['Mi estimado registrado', fmt$(totalProduccion), 'Anticipo (ya cobrado)', `-${fmt$(antic)}`],
-      ['Mi estimado neto', fmt$(totalProduccion - antic), 'Total cliente (subtotal)', fmt$(oficial)],
-      ['Diferencia (cliente - neto)', (diferencia >= 0 ? '+' : '') + fmt$(diferencia), 'IVA (16%)', fmt$(iva)],
-      [comentarios ? `Notas: ${comentarios}` : '', '', 'TOTAL A FACTURAR', fmt$(totalFact)],
+    // Título del recuadro
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(15, 52, 96)
+    doc.text('RESUMEN DE FACTURACIÓN', boxX + 4, boxY + 5.5)
+
+    // Línea separadora del título
+    doc.setDrawColor(15, 52, 96)
+    doc.setLineWidth(0.3)
+    doc.line(boxX + 4, boxY + 7, boxX + boxW - 4, boxY + 7)
+
+    // Dos columnas: izquierda y derecha
+    const colL = boxX + 4
+    const colR = boxX + boxW / 2 + 4
+    const valL = boxX + boxW / 2 - 4
+    const valR = boxX + boxW - 4
+    let y = boxY + 7 + rowH
+
+    const leftRows = [
+      ['Mi estimado registrado', fmt$(total)],
+      ['Anticipo (ya cobrado)',   `-${fmt$(antic)}`],
+      ['Mi estimado neto',        fmt$(total - antic)],
+      ['Diferencia (cliente - neto)', (diferencia >= 0 ? '+' : '') + fmt$(diferencia)],
+    ]
+    const rightRows = [
+      ['Total cliente (subtotal)', fmt$(oficial)],
+      ['IVA (16%)',                fmt$(iva)],
+      ['TOTAL A FACTURAR',        fmt$(totalFact)],
     ]
 
-    facRows.forEach((row, i) => {
-      doc.setFontSize(8)
-      doc.setFont('helvetica', i === 3 ? 'bold' : 'normal')
+    leftRows.forEach(([label, val], i) => {
+      const bold = i === leftRows.length - 1
+      doc.setFont('helvetica', bold ? 'bold' : 'normal')
+      doc.setFontSize(7.5)
       doc.setTextColor(60, 60, 60)
-      if (row[0]) doc.text(row[0], col1, y)
-      if (row[1]) doc.text(row[1], col2, y, { align: 'right' })
-      doc.setFont('helvetica', i === 3 ? 'bold' : 'normal')
-      doc.setTextColor(i === 3 ? 20 : 60, i === 3 ? 120 : 60, i === 3 ? 60 : 60)
-      if (row[2]) doc.text(row[2], col3, y)
-      if (row[3]) doc.text(row[3], pageW - 12, y, { align: 'right' })
-      y += 5.5
+      doc.text(label, colL, y + i * rowH)
+      doc.setFont('helvetica', bold ? 'bold' : 'normal')
+      doc.setTextColor(bold ? (diferencia >= 0 ? 20 : 180) : 60, bold ? (diferencia >= 0 ? 120 : 30) : 60, 60)
+      doc.text(val, valL, y + i * rowH, { align: 'right' })
     })
+
+    rightRows.forEach(([label, val], i) => {
+      const bold = i === rightRows.length - 1
+      doc.setFont('helvetica', bold ? 'bold' : 'normal')
+      doc.setFontSize(bold ? 8.5 : 7.5)
+      doc.setTextColor(bold ? 15 : 60, bold ? 52 : 60, bold ? 96 : 60)
+      doc.text(label, colR, y + i * rowH)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(bold ? 20 : 60, bold ? 120 : 60, bold ? 60 : 60)
+      doc.text(val, valR, y + i * rowH, { align: 'right' })
+    })
+
+    // Notas si existen
+    if (comentarios) {
+      const notaY = boxY + 44
+      doc.setFont('helvetica', 'italic')
+      doc.setFontSize(7)
+      doc.setTextColor(100, 100, 100)
+      doc.text(`Notas: ${comentarios}`, colL, notaY)
+    }
   }
 
   addFooter(doc, oficial > 0 ? totalFact : totalProduccion)
