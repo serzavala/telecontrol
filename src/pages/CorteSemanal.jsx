@@ -78,10 +78,23 @@ export default function CorteSemanal() {
   }
 
   function generarPDF() {
-    if (!rows.length) { alert('No hay registros para generar el PDF.'); return }
-    const periodo = filtros.inicio && filtros.fin ? `${filtros.inicio} al ${filtros.fin}` : 'Todo el período'
-    generarPDFSemanal({ rows, periodo, getCuadrilla: db.getCuadrilla, getProyecto: db.getProyecto, getConcepto: db.getConcepto })
-  }
+  if (!rows.length) { alert('No hay registros para generar el PDF.'); return }
+  const periodo = filtros.inicio && filtros.fin ? `${filtros.inicio} al ${filtros.fin}` : 'Todo el período'
+  generarPDFSemanal({
+    rows,
+    periodo,
+    getCuadrilla: db.getCuadrilla,
+    getProyecto: db.getProyecto,
+    getConcepto: db.getConcepto,
+    corte: {
+      cifra_oficial: cifraOficial,
+      anticipo,
+      iva,
+      total_facturar: totalFacturar,
+      comentarios_facturacion: comentarios,
+    }
+  })
+}
 
   return (
     <div>

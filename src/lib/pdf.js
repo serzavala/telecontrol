@@ -60,21 +60,35 @@ function addFooter(doc, total) {
   doc.text('NOVUS — Innovacion y Futuro', pageW - 12, pageH - 10, { align: 'right' })
 }
 
-export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, getConcepto }) {
+export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, getConcepto, corte }) {
   const doc = new jsPDF({ orientation: 'landscape' })
   const hoy = new Date().toLocaleDateString('es-MX')
-  const total = rows.reduce((a, r) => a + Number(r.total), 0)
+  const totalProduccion = rows.reduce((a, r) => a + Number(r.total), 0)
+
+  // Si viene de historial usamos los datos guardados, si no los calculamos en vivo
+  const oficial    = corte ? Number(corte.cifra_oficial   || 0) : 0
+  const antic      = corte ? Number(corte.anticipo        || 0) : 0
+  const iva        = corte ? Number(corte.iva             || 0) : oficial * 0.16
+  const totalFact  = corte ? Number(corte.total_facturar  || 0) : oficial + iva
+  const diferencia = oficial - (totalProduccion - antic)
+  const comentarios = corte?.comentarios_facturacion || ''
+
   const startY = addHeader(doc, 'CORTE DE PRODUCCION SEMANAL', 'Pago Izzi-Monstel 2026', [
-    { label: 'Fecha de emision', value: hoy },
-    { label: 'Periodo', value: periodo || 'Todo el periodo' },
-    { label: 'Registros', value: String(rows.length) },
+    { label: 'Fecha de emision',  value: hoy },
+    { label: 'Periodo',           value: periodo || 'Todo el periodo' },
+    { label: 'Registros',         value: String(rows.length) },
   ])
+
+  // Tabla de producción
   const tableData = rows.map(r => {
-    const c = getCuadrilla(r.cuadrilla_id)
-    const p = getProyecto(r.proyecto_id)
+    const c  = getCuadrilla(r.cuadrilla_id)
+    const p  = getProyecto(r.proyecto_id)
     const cn = getConcepto(r.concepto_id)
-    return [r.fecha, c.nombre, `${cn.num || ''}. ${cn.nombre}`, `${p.nombre} - ${p.ciudad}`, `${Number(r.cantidad).toLocaleString('es-MX')} ${cn.unidad || ''}`, fmt$(r.precio_unitario), fmt$(r.total)]
+    return [r.fecha, c.nombre, `${cn.num || ''}. ${cn.nombre}`, `${p.nombre} - ${p.ciudad}`,
+            `${Number(r.cantidad).toLocaleString('es-MX')} ${cn.unidad || ''}`,
+            fmt$(r.precio_unitario), fmt$(r.total)]
   })
+
   doc.autoTable({
     startY,
     head: [['Fecha', 'Cuadrilla', 'Concepto', 'Proyecto / Ciudad', 'Cantidad', 'P. Unit.', 'Total']],
@@ -95,8 +109,40 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
     tableLineColor: [200, 210, 230],
     tableLineWidth: 0.3,
   })
-  addFooter(doc, total)
-  doc.save(`corte-semanal-${hoy.replace(/\//g, '-')}.pdf`)
+
+  // Bloque de facturación (solo si hay cifra oficial)
+  if (oficial > 0) {
+    const pageW = doc.internal.pageSize.getWidth()
+    let y = doc.lastAutoTable.finalY + 8
+    doc.setDrawColor(15, 52, 96)
+    doc.setLineWidth(0.4)
+    doc.line(12, y, pageW - 12, y)
+    y += 5
+
+    const col1 = 12, col2 = 90, col3 = 165, col4 = 220
+    const facRows = [
+      ['Mi estimado registrado', fmt$(totalProduccion), 'Anticipo (ya cobrado)', `-${fmt$(antic)}`],
+      ['Mi estimado neto', fmt$(totalProduccion - antic), 'Total cliente (subtotal)', fmt$(oficial)],
+      ['Diferencia (cliente - neto)', (diferencia >= 0 ? '+' : '') + fmt$(diferencia), 'IVA (16%)', fmt$(iva)],
+      [comentarios ? `Notas: ${comentarios}` : '', '', 'TOTAL A FACTURAR', fmt$(totalFact)],
+    ]
+
+    facRows.forEach((row, i) => {
+      doc.setFontSize(8)
+      doc.setFont('helvetica', i === 3 ? 'bold' : 'normal')
+      doc.setTextColor(60, 60, 60)
+      if (row[0]) doc.text(row[0], col1, y)
+      if (row[1]) doc.text(row[1], col2, y, { align: 'right' })
+      doc.setFont('helvetica', i === 3 ? 'bold' : 'normal')
+      doc.setTextColor(i === 3 ? 20 : 60, i === 3 ? 120 : 60, i === 3 ? 60 : 60)
+      if (row[2]) doc.text(row[2], col3, y)
+      if (row[3]) doc.text(row[3], pageW - 12, y, { align: 'right' })
+      y += 5.5
+    })
+  }
+
+  addFooter(doc, oficial > 0 ? totalFact : totalProduccion)
+  doc.save(`corte-semanal-${periodo?.replace(/\//g, '-') || hoy.replace(/\//g, '-')}.pdf`)
 }
 
 export function generarPDFCN({ rows, periodoLabel, diaCobro, getCuadrilla, getProyecto }) {
