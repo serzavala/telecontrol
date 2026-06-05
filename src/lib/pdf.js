@@ -39,25 +39,26 @@ function addHeader(doc, titulo, subtitulo, detalles) {
   return y + 3
 }
 
-function addFooter(doc, total) {
+function addFooter(doc, total, startY) {
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
+  const y = startY || pageH - 30
   doc.setDrawColor(15, 52, 96)
   doc.setLineWidth(0.5)
-  doc.line(12, pageH - 30, pageW - 12, pageH - 30)
+  doc.line(12, y, pageW - 12, y)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
   doc.setTextColor(15, 52, 96)
-  doc.text('TOTAL A COBRAR:', pageW - 68, pageH - 24)
+  doc.text('TOTAL A COBRAR:', pageW - 68, y + 6)
   doc.setFontSize(12)
   doc.setTextColor(20, 120, 60)
-  doc.text(fmt$(total), pageW - 12, pageH - 24, { align: 'right' })
+  doc.text(fmt$(total), pageW - 12, y + 6, { align: 'right' })
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
   doc.setTextColor(150, 150, 150)
-  doc.text('Firma autorizada: ________________________________', 12, pageH - 16)
-  doc.text('Fecha: ____________________', 12, pageH - 10)
-  doc.text('NOVUS — Innovacion y Futuro', pageW - 12, pageH - 10, { align: 'right' })
+  doc.text('Firma autorizada: ________________________________', 12, y + 14)
+  doc.text('Fecha: ____________________', 12, y + 20)
+  doc.text('NOVUS — Innovacion y Futuro', pageW - 12, y + 20, { align: 'right' })
 }
 
 export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, getConcepto, corte }) {
@@ -111,42 +112,39 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
   })
 
   // Bloque de facturación (solo si hay cifra oficial)
-  if (oficial > 0) {
+ if (oficial > 0) {
     const pageW = doc.internal.pageSize.getWidth()
-    const pageH = doc.internal.pageSize.getHeight()
+    const tableEndY = doc.lastAutoTable.finalY + 6
     const boxX = 12
     const boxW = pageW - 24
-    const boxY = pageH - 62  // encima del footer
-    const rowH = 7
+    const rowH = 6.5
+    const boxH = 42
+    const boxY = tableEndY
 
-    // Fondo del recuadro
+    // Fondo y borde
     doc.setFillColor(240, 245, 255)
     doc.setDrawColor(15, 52, 96)
     doc.setLineWidth(0.4)
-    doc.roundedRect(boxX, boxY, boxW, 50, 2, 2, 'FD')
+    doc.roundedRect(boxX, boxY, boxW, boxH, 2, 2, 'FD')
 
-    // Título del recuadro
+    // Título
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
     doc.setTextColor(15, 52, 96)
     doc.text('RESUMEN DE FACTURACIÓN', boxX + 4, boxY + 5.5)
-
-    // Línea separadora del título
-    doc.setDrawColor(15, 52, 96)
     doc.setLineWidth(0.3)
     doc.line(boxX + 4, boxY + 7, boxX + boxW - 4, boxY + 7)
 
-    // Dos columnas: izquierda y derecha
-    const colL = boxX + 4
-    const colR = boxX + boxW / 2 + 4
-    const valL = boxX + boxW / 2 - 4
-    const valR = boxX + boxW - 4
+    const colL  = boxX + 4
+    const valL  = boxX + boxW / 2 - 4
+    const colR  = boxX + boxW / 2 + 4
+    const valR  = boxX + boxW - 4
     let y = boxY + 7 + rowH
 
     const leftRows = [
       ['Mi estimado registrado', fmt$(total)],
-      ['Anticipo (ya cobrado)',   `-${fmt$(antic)}`],
-      ['Mi estimado neto',        fmt$(total - antic)],
+      ['Anticipo (ya cobrado)',  `-${fmt$(antic)}`],
+      ['Mi estimado neto',       fmt$(total - antic)],
       ['Diferencia (cliente - neto)', (diferencia >= 0 ? '+' : '') + fmt$(diferencia)],
     ]
     const rightRows = [
@@ -162,7 +160,8 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
       doc.setTextColor(60, 60, 60)
       doc.text(label, colL, y + i * rowH)
       doc.setFont('helvetica', bold ? 'bold' : 'normal')
-      doc.setTextColor(bold ? (diferencia >= 0 ? 20 : 180) : 60, bold ? (diferencia >= 0 ? 120 : 30) : 60, 60)
+      const color = bold ? (diferencia >= 0 ? [20, 140, 60] : [180, 30, 30]) : [60, 60, 60]
+      doc.setTextColor(...color)
       doc.text(val, valL, y + i * rowH, { align: 'right' })
     })
 
@@ -177,15 +176,20 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
       doc.text(val, valR, y + i * rowH, { align: 'right' })
     })
 
-    // Notas si existen
     if (comentarios) {
-      const notaY = boxY + 44
       doc.setFont('helvetica', 'italic')
       doc.setFontSize(7)
       doc.setTextColor(100, 100, 100)
-      doc.text(`Notas: ${comentarios}`, colL, notaY)
+      doc.text(`Notas: ${comentarios}`, colL, boxY + boxH - 3)
     }
+
+    // Footer debajo del recuadro
+    addFooter(doc, totalFact, boxY + boxH + 4)
+  } else {
+    addFooter(doc, total)
   }
+
+  doc.save(`corte-semanal-${periodo?.replace(/\//g, '-') || hoy.replace(/\//g, '-')}.pdf`)
 
   addFooter(doc, oficial > 0 ? totalFact : totalProduccion)
   doc.save(`corte-semanal-${periodo?.replace(/\//g, '-') || hoy.replace(/\//g, '-')}.pdf`)
