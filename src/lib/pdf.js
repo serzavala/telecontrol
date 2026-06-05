@@ -114,80 +114,122 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
   // Bloque de facturación (solo si hay cifra oficial)
  if (oficial > 0) {
     const pageW = doc.internal.pageSize.getWidth()
-    const tableEndY = doc.lastAutoTable.finalY + 6
-    const boxX = 12
-    const boxW = pageW - 24
-    const rowH = 6.5
-    const boxH = 42
-    const boxY = tableEndY
+    const pageH = doc.internal.pageSize.getHeight()
 
-    // Fondo y borde
-    doc.setFillColor(240, 245, 255)
-    doc.setDrawColor(15, 52, 96)
-    doc.setLineWidth(0.4)
-    doc.roundedRect(boxX, boxY, boxW, boxH, 2, 2, 'FD')
+    // Footer en página de producción con mi estimado
+    addFooter(doc, total)
 
-    // Título
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
-    doc.setTextColor(15, 52, 96)
-    doc.text('RESUMEN DE FACTURACIÓN', boxX + 4, boxY + 5.5)
-    doc.setLineWidth(0.3)
-    doc.line(boxX + 4, boxY + 7, boxX + boxW - 4, boxY + 7)
+    // ── PÁGINA 2: Resumen de facturación ──
+    doc.addPage()
 
-    const colL  = boxX + 4
-    const valL  = boxX + boxW / 2 - 4
-    const colR  = boxX + boxW / 2 + 4
-    const valR  = boxX + boxW - 4
-    let y = boxY + 7 + rowH
+    // Encabezado igual al de la primera página
+    addHeader(doc, 'RESUMEN DE FACTURACIÓN', `Período: ${periodo || 'Todo el período'}`, [
+      { label: 'Proyecto', value: doc.internal.pages[1] ? (periodo || '') : '' },
+    ])
 
-    const leftRows = [
-      ['Mi estimado registrado', fmt$(total)],
-      ['Anticipo (ya cobrado)',  `-${fmt$(antic)}`],
-      ['Mi estimado neto',       fmt$(total - antic)],
-      ['Diferencia (cliente - neto)', (diferencia >= 0 ? '+' : '') + fmt$(diferencia)],
-    ]
-    const rightRows = [
-      ['Total cliente (subtotal)', fmt$(oficial)],
-      ['IVA (16%)',                fmt$(iva)],
-      ['TOTAL A FACTURAR',        fmt$(totalFact)],
-    ]
+    const cx = pageW / 2
+    let y = 60
 
-    leftRows.forEach(([label, val], i) => {
-      const bold = i === leftRows.length - 1
-      doc.setFont('helvetica', bold ? 'bold' : 'normal')
-      doc.setFontSize(7.5)
-      doc.setTextColor(60, 60, 60)
-      doc.text(label, colL, y + i * rowH)
-      doc.setFont('helvetica', bold ? 'bold' : 'normal')
-      const color = bold ? (diferencia >= 0 ? [20, 140, 60] : [180, 30, 30]) : [60, 60, 60]
-      doc.setTextColor(...color)
-      doc.text(val, valL, y + i * rowH, { align: 'right' })
-    })
-
-    rightRows.forEach(([label, val], i) => {
-      const bold = i === rightRows.length - 1
-      doc.setFont('helvetica', bold ? 'bold' : 'normal')
-      doc.setFontSize(bold ? 8.5 : 7.5)
-      doc.setTextColor(bold ? 15 : 60, bold ? 52 : 60, bold ? 96 : 60)
-      doc.text(label, colR, y + i * rowH)
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(bold ? 20 : 60, bold ? 120 : 60, bold ? 60 : 60)
-      doc.text(val, valR, y + i * rowH, { align: 'right' })
-    })
-
-    if (comentarios) {
-      doc.setFont('helvetica', 'italic')
-      doc.setFontSize(7)
+    // Función helper para una fila del resumen
+    function filaResumen(label, valor, color, tamLabel, tamValor, negrita) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(tamLabel || 10)
       doc.setTextColor(100, 100, 100)
-      doc.text(`Notas: ${comentarios}`, colL, boxY + boxH - 3)
+      doc.text(label, cx - 10, y, { align: 'right' })
+      doc.setFont('helvetica', negrita ? 'bold' : 'normal')
+      doc.setFontSize(tamValor || 12)
+      doc.setTextColor(...(color || [40, 40, 40]))
+      doc.text(valor, cx + 10, y)
+      y += negrita ? 14 : 10
     }
 
-    // Footer debajo del recuadro
-    addFooter(doc, totalFact, boxY + boxH + 4)
+    // ── Bloque izquierdo: mi estimado ──
+    const boxPad = 16
+    const boxW = pageW - 32
+
+    // Recuadro MI ESTIMADO
+    doc.setFillColor(245, 248, 255)
+    doc.setDrawColor(180, 200, 230)
+    doc.setLineWidth(0.5)
+    doc.roundedRect(16, y - 6, boxW, 52, 3, 3, 'FD')
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(100, 120, 160)
+    doc.text('MI ESTIMADO', 16 + boxPad, y + 2)
+    y += 10
+
+    filaResumen('Producción registrada', fmt$(total), [40, 40, 40], 10, 12)
+    filaResumen('Anticipo ya cobrado', `-${fmt$(antic)}`, [200, 50, 50], 10, 12)
+
+    // Línea separadora
+    doc.setDrawColor(180, 200, 230)
+    doc.setLineWidth(0.4)
+    doc.line(16 + boxPad, y - 2, pageW - 16 - boxPad, y - 2)
+
+    filaResumen('Mi estimado neto', fmt$(total - antic), [15, 52, 96], 10, 13, true)
+
+    y += 10
+
+    // Recuadro CLIENTE
+    doc.setFillColor(245, 255, 248)
+    doc.setDrawColor(150, 210, 180)
+    doc.setLineWidth(0.5)
+    doc.roundedRect(16, y - 6, boxW, 42, 3, 3, 'FD')
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(80, 150, 110)
+    doc.text('CIFRAS DEL CLIENTE', 16 + boxPad, y + 2)
+    y += 10
+
+    filaResumen('Total cliente (subtotal)', fmt$(oficial), [40, 40, 40], 10, 12)
+    filaResumen('IVA (16%)', fmt$(iva), [40, 40, 40], 10, 12)
+
+    doc.setDrawColor(150, 210, 180)
+    doc.setLineWidth(0.4)
+    doc.line(16 + boxPad, y - 2, pageW - 16 - boxPad, y - 2)
+
+    filaResumen('Total a facturar', fmt$(totalFact), [20, 120, 60], 11, 15, true)
+
+    y += 10
+
+    // Recuadro DIFERENCIA
+    const difPos = diferencia >= 0
+    doc.setFillColor(difPos ? 245 : 255, difPos ? 255 : 245, difPos ? 248 : 245)
+    doc.setDrawColor(difPos ? 150 : 210, difPos ? 210 : 150, difPos ? 180 : 150)
+    doc.setLineWidth(0.5)
+    doc.roundedRect(16, y - 6, boxW, 28, 3, 3, 'FD')
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(difPos ? 80 : 180, difPos ? 150 : 60, difPos ? 110 : 60)
+    doc.text('DIFERENCIA (cliente − mi estimado neto)', 16 + boxPad, y + 2)
+    y += 10
+
+    filaResumen(
+      difPos ? 'A favor' : 'En contra',
+      (diferencia >= 0 ? '+' : '') + fmt$(diferencia),
+      difPos ? [20, 140, 70] : [180, 40, 40],
+      11, 15, true
+    )
+
+    // Notas
+    if (comentarios) {
+      y += 6
+      doc.setFont('helvetica', 'italic')
+      doc.setFontSize(8.5)
+      doc.setTextColor(120, 120, 120)
+      doc.text(`Notas: ${comentarios}`, 16 + boxPad, y)
+    }
+
+    // Footer normal en página 2
+    addFooter(doc, totalFact)
   } else {
     addFooter(doc, total)
   }
+
+    // Footer deb
 
   doc.save(`corte-semanal-${periodo?.replace(/\//g, '-') || hoy.replace(/\//g, '-')}.pdf`)
 
