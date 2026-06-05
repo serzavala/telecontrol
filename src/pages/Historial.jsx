@@ -45,42 +45,49 @@ export default function Historial() {
   const montoPend   = rows.filter(c => c.estado_pago === 'Pendiente').reduce((a, c) => a + Number(c.total), 0)
 
   // Regenerar PDF desde historial
-  function verPDF(corte) {
-    if (corte.tipo === 'Semanal') {
-      // Filtramos los registros de producción del período guardado
-      const [ini, fin] = (corte.periodo || '').split(' al ').map(s => s.trim())
-      const rowsProd = db.produccion.filter(r => {
-        const enPeriodo = !ini || !fin || (r.fecha >= ini && r.fecha <= fin)
-        const enProy = !corte.proyecto_id || r.proyecto_id === corte.proyecto_id
-        return enPeriodo && enProy
-      })
-      if (!rowsProd.length) {
-        alert('No se encontraron registros de producción para este período. El PDF puede haber sido generado con datos que ya no existen.')
-        return
-      }
-      generarPDFSemanal({
-        rows: rowsProd,
-        periodo: corte.periodo,
-        getCuadrilla: db.getCuadrilla,
-        getProyecto: db.getProyecto,
-        getConcepto: db.getConcepto,
-        corte,
-      })
-    } else {
-      // CN — reconstruimos los params del período
-      const rowsCN = db.registrosCN.filter(r => {
-        // El período CN se guarda como "1ª quincena Junio 2026" — usamos proyecto_id y periodo
-        return !corte.proyecto_id || r.proyecto_id === corte.proyecto_id
-      })
-      generarPDFCN({
-        rows: rowsCN,
-        periodoLabel: corte.periodo,
-        diaCobro: '—',
-        getCuadrilla: db.getCuadrilla,
-        getProyecto: db.getProyecto,
-      })
+ function verPDF(corte) {
+  if (corte.tipo === 'Semanal') {
+    const partes = corte.periodo.split(' al ')
+    const ini = partes[0]?.trim()
+    const fin = partes[1]?.trim()
+    console.log('Período:', ini, '→', fin)
+    console.log('Proyecto ID:', corte.proyecto_id)
+    console.log('Registros producción total:', db.produccion.length)
+
+    const rowsProd = db.produccion.filter(r => {
+      const enPeriodo = !ini || !fin || (r.fecha >= ini && r.fecha <= fin)
+      const enProy = !corte.proyecto_id || r.proyecto_id === corte.proyecto_id
+      return enPeriodo && enProy
+    })
+
+    console.log('Registros filtrados:', rowsProd.length)
+    console.log('Muestra primer registro:', rowsProd[0])
+
+    if (!rowsProd.length) {
+      alert('No se encontraron registros de producción para este período.')
+      return
     }
+    generarPDFSemanal({
+      rows: rowsProd,
+      periodo: corte.periodo,
+      getCuadrilla: db.getCuadrilla,
+      getProyecto: db.getProyecto,
+      getConcepto: db.getConcepto,
+      corte,
+    })
+  } else {
+    const rowsCN = db.registrosCN.filter(r => {
+      return !corte.proyecto_id || r.proyecto_id === corte.proyecto_id
+    })
+    generarPDFCN({
+      rows: rowsCN,
+      periodoLabel: corte.periodo,
+      diaCobro: '—',
+      getCuadrilla: db.getCuadrilla,
+      getProyecto: db.getProyecto,
+    })
   }
+}
 
   const fmt$ = db.fmt$
 

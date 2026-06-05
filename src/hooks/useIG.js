@@ -20,7 +20,6 @@ export function useIG() {
     setLoading(true)
     setError(null)
     try {
-      // SIN filtro por user_id — todos los usuarios ven los mismos datos
       const [emp, veh, ing, gas, nom, pre, cie, dis] = await Promise.all([
         supabase.from('empleados').select('*').eq('activo', true).order('numero'),
         supabase.from('vehiculos').select('*').order('placa'),
@@ -141,8 +140,6 @@ export function useIG() {
     if (!error) load()
     return { error }
   }
-
-  // ── Dispersiones ──
   async function addDispersion(cabecera, depositos) {
     const { data: disp, error: e1 } = await supabase
       .from('dispersiones')
@@ -150,15 +147,12 @@ export function useIG() {
       .select()
       .single()
     if (e1) return { error: e1 }
-
     const filas = depositos.map(d => ({ ...d, dispersion_id: disp.id }))
     const { error: e2 } = await supabase.from('dispersion_depositos').insert(filas)
     if (e2) return { error: e2 }
-
     load()
     return { error: null, id: disp.id }
   }
-
   async function getDepositos(dispersionId) {
     const { data, error } = await supabase
       .from('dispersion_depositos')
@@ -168,7 +162,6 @@ export function useIG() {
     if (error) return []
     return data || []
   }
-
   async function deleteDispersion(id) {
     const { error } = await supabase.from('dispersiones').delete().eq('id', id)
     if (!error) load()

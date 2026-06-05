@@ -40,7 +40,7 @@ export default function Dispersion() {
   const cuadra = Math.abs(diferencia) < 0.01 && totalObjetivo > 0 && depositos.length > 0
 
   // Empleados con datos bancarios para receptor
-  const empleadosConCuenta = ig.empleados.filter(e => e.cuenta || e.clabe)
+  const empleadosConCuenta = ig.empleados
 
   // Nómina de la semana capturada (para jalar beneficiarios)
   const nominaSemana = cabecera.semana
