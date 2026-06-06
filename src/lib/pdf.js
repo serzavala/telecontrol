@@ -112,25 +112,23 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
   })
 
   // Bloque de facturación (solo si hay cifra oficial)
- if (oficial > 0) {
+ // Bloque de facturación (solo si hay cifra oficial)
+  if (oficial > 0) {
     const pageW = doc.internal.pageSize.getWidth()
-    const pageH = doc.internal.pageSize.getHeight()
 
     // Footer en página de producción con mi estimado
-    addFooter(doc, total)
+    addFooter(doc, totalProduccion)
 
     // ── PÁGINA 2: Resumen de facturación ──
     doc.addPage()
 
-    // Encabezado igual al de la primera página
     addHeader(doc, 'RESUMEN DE FACTURACIÓN', `Período: ${periodo || 'Todo el período'}`, [
-      { label: 'Proyecto', value: doc.internal.pages[1] ? (periodo || '') : '' },
+      { label: 'Proyecto', value: periodo || '' },
     ])
 
     const cx = pageW / 2
     let y = 60
 
-    // Función helper para una fila del resumen
     function filaResumen(label, valor, color, tamLabel, tamValor, negrita) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(tamLabel || 10)
@@ -143,7 +141,6 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
       y += negrita ? 14 : 10
     }
 
-    // ── Bloque izquierdo: mi estimado ──
     const boxPad = 16
     const boxW = pageW - 32
 
@@ -159,15 +156,14 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
     doc.text('MI ESTIMADO', 16 + boxPad, y + 2)
     y += 10
 
-    filaResumen('Producción registrada', fmt$(total), [40, 40, 40], 10, 12)
+    filaResumen('Producción registrada', fmt$(totalProduccion), [40, 40, 40], 10, 12)
     filaResumen('Anticipo ya cobrado', `-${fmt$(antic)}`, [200, 50, 50], 10, 12)
 
-    // Línea separadora
     doc.setDrawColor(180, 200, 230)
     doc.setLineWidth(0.4)
     doc.line(16 + boxPad, y - 2, pageW - 16 - boxPad, y - 2)
 
-    filaResumen('Mi estimado neto', fmt$(total - antic), [15, 52, 96], 10, 13, true)
+    filaResumen('Mi estimado neto', fmt$(totalProduccion - antic), [15, 52, 96], 10, 13, true)
 
     y += 10
 
@@ -214,7 +210,6 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
       11, 15, true
     )
 
-    // Notas
     if (comentarios) {
       y += 6
       doc.setFont('helvetica', 'italic')
@@ -223,17 +218,11 @@ export function generarPDFSemanal({ rows, periodo, getCuadrilla, getProyecto, ge
       doc.text(`Notas: ${comentarios}`, 16 + boxPad, y)
     }
 
-    // Footer normal en página 2
     addFooter(doc, totalFact)
   } else {
-    addFooter(doc, total)
+    addFooter(doc, totalProduccion)
   }
 
-    // Footer deb
-
-  doc.save(`corte-semanal-${periodo?.replace(/\//g, '-') || hoy.replace(/\//g, '-')}.pdf`)
-
-  addFooter(doc, oficial > 0 ? totalFact : totalProduccion)
   doc.save(`corte-semanal-${periodo?.replace(/\//g, '-') || hoy.replace(/\//g, '-')}.pdf`)
 }
 
