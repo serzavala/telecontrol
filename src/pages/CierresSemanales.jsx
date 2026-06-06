@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useIG } from '../hooks/useIG'
 import Modal from '../components/Modal'
+import { generarPDFCierre } from '../lib/pdf'
 
 export default function CierresSemanales() {
   const ig = useIG()
@@ -133,8 +134,10 @@ export default function CierresSemanales() {
                 {c.num_empleados} empleados · {c.num_cuadrillas} cuadrillas · {c.fecha_cierre ? `Cerrado: ${c.fecha_cierre}` : 'Abierto'}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className={`badge ${c.estado === 'Cerrado' ? 'badge-green' : 'badge-amber'}`}>{c.estado}</span>
+              <button className="btn btn-sm" style={{ background: '#0F3460', color: '#fff', border: 'none' }}
+                onClick={ev => { ev.stopPropagation(); generarPDFCierre({ cierre: c }) }}>PDF</button>
             </div>
           </div>
 
