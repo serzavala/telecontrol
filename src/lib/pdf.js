@@ -272,3 +272,99 @@ export function generarPDFCN({ rows, periodoLabel, diaCobro, getCuadrilla, getPr
   addFooter(doc, total)
   doc.save(`corte-cn-${periodoLabel.replace(/\s/g, '-')}.pdf`)
 }
+export function generarPDFCierre({ cierre }) {
+  const doc = new jsPDF()
+  const hoy = new Date().toLocaleDateString('es-MX')
+
+  const startY = addHeader(doc, 'CIERRE SEMANAL', cierre.periodo_label, [
+    { label: 'Fecha de emision', value: hoy },
+    { label: 'Periodo', value: cierre.periodo_label },
+    { label: 'Estado', value: cierre.estado },
+    { label: 'Empleados', value: `${cierre.num_empleados} · ${cierre.num_cuadrillas} cuadrillas` },
+  ])
+
+  // ── Tabla resumen financiero ──
+  const margen = Number(cierre.total_ingresos) > 0
+    ? Math.round(Number(cierre.utilidad_neta) / Number(cierre.total_ingresos) * 100) + '%'
+    : '—'
+
+  doc.autoTable({
+    startY,
+    head: [['Concepto', 'Monto']],
+    body: [
+      ['Ingresos totales', fmt$(cierre.total_ingresos)],
+      ['Nomina (neto)', `-${fmt$(cierre.total_nomina)}`],
+      ['Gastos operativos', `-${fmt$(cierre.total_gastos)}`],
+      ['Utilidad neta', fmt$(cierre.utilidad_neta)],
+      ['Margen de utilidad', margen],
+    ],
+    styles: { fontSize: 10, cellPadding: 4, font: 'helvetica', textColor: [40, 40, 40] },
+    headStyles: { fillColor: [15, 52, 96], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [240, 245, 255] },
+    columnStyles: {
+      0: { cellWidth: 120 },
+      1: { cellWidth: 60, halign: 'right', fontStyle: 'bold' },
+    },
+    margin: { left: 12, right: 12 },
+    didParseCell: (data) => {
+      // Resaltar fila de utilidad neta
+      if (data.row.index === 3) {
+        data.cell.styles.fillColor = [230, 236, 250]
+        data.cell.styles.fontStyle = 'bold'
+        data.cell.styles.textColor = [15, 52, 96]
+        data.cell.styles.fontSize = 11
+      }
+    },
+  })
+
+  let y = doc.lastAutoTable.finalY + 10
+
+  // ── Tabla distribución de socios ──
+  if (cierre.distribucion && cierre.distribucion.length > 0) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.setTextColor(15, 52, 96)
+    doc.text('Distribucion de utilidad entre socios', 12, y)
+    y += 4
+
+    doc.autoTable({
+      startY: y,
+      head: [['Socio', 'Porcentaje', 'Monto']],
+      body: cierre.distribucion.map(d => [
+        d.nombre,
+        `${d.porcentaje}%`,
+        fmt$(d.monto),
+      ]),
+      styles: { fontSize: 10, cellPadding: 4, font: 'helvetica', textColor: [40, 40, 40] },
+      headStyles: { fillColor: [15, 52, 96], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 255, 248] },
+      columnStyles: {
+        0: { cellWidth: 100 },
+        1: { cellWidth: 40, halign: 'center' },
+        2: { cellWidth: 40, halign: 'right', fontStyle: 'bold' },
+      },
+      margin: { left: 12, right: 12 },
+    })
+    y = doc.lastAutoTable.finalY
+  }
+
+  // ── Footer con utilidad como total ──
+  const pageW = doc.internal.pageSize.getWidth()
+  const footerY = y + 14
+  doc.setDrawColor(15, 52, 96)
+  doc.setLineWidth(0.5)
+  doc.line(12, footerY, pageW - 12, footerY)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(15, 52, 96)
+  doc.text('UTILIDAD NETA:', pageW - 68, footerY + 6)
+  doc.setFontSize(12)
+  doc.setTextColor(20, 120, 60)
+  doc.text(fmt$(cierre.utilidad_neta), pageW - 12, footerY + 6, { align: 'right' })
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(150, 150, 150)
+  doc.text('NOVUS — Innovacion y Futuro', pageW - 12, footerY + 16, { align: 'right' })
+
+  doc.save(`cierre-${cierre.periodo_label.replace(/\s/g, '-').replace(/—/g, '')}.pdf`)
+}
