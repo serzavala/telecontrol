@@ -275,7 +275,12 @@ export default function CierresSemanales() {
             <div style={{ fontSize: 12, fontWeight: 500, color: '#6B7A99', marginBottom: 8 }}>{editSocio ? `Editando: ${editSocio.nombre}` : 'Agregar socio'}</div>
             <form onSubmit={handleSaveSocio} className="space-y-2">
               <div className="form-row c2">
-                <div><label className="label">Nombre *</label><input className="input" value={socioForm.nombre} onChange={e => setSocioForm(f => ({ ...f, nombre: e.target.value }))} required /></div>
+                <div><label className="label">Empleado *</label>
+                  <select className="input" value={socioForm.nombre} onChange={e => setSocioForm(f => ({ ...f, nombre: e.target.value }))} required>
+                    <option value="">Seleccionar...</option>
+                    {ig.empleados.map(e => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
+                  </select>
+                </div>
                 <div><label className="label">Porcentaje % *</label><input className="input" type="number" min="0.01" max="100" step="0.01" value={socioForm.porcentaje} onChange={e => setSocioForm(f => ({ ...f, porcentaje: e.target.value }))} required /></div>
               </div>
               <div className="flex justify-end gap-2">
