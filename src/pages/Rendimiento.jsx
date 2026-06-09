@@ -53,6 +53,17 @@ function MiniBar({ pct, color }) {
   )
 }
 
+// Dado un rango de semana y N días activos de referencia,
+// devuelve los primeros N días con producción dentro de esa semana
+function primerNDiasActivos(produccion, semIni, semFin, nDias) {
+  const fechasConDatos = [...new Set(
+    produccion
+      .filter(r => r.fecha >= semIni && r.fecha <= semFin)
+      .map(r => r.fecha)
+  )].sort()
+  return fechasConDatos.slice(0, nDias)
+}
+
 export default function Rendimiento() {
   const db = useDB()
   const [periodoActual, setPeriodoActual] = useState('4')
@@ -87,16 +98,64 @@ export default function Rendimiento() {
       (!filtroConc || r.concepto_id === filtroConc)
     ), [db.produccion, filtroCuad, filtroConc])
 
-  // Datos período actual — incluye promDia para normalización
+  // Semana anterior directa (siempre 1 semana atrás, independiente del filtro de referencia)
+  const semAntDirecta = useMemo(() => {
+    const semsAntes = todasSems.filter(s => s.fin < iniActual)
+    return semsAntes.length ? semsAntes[semsAntes.length - 1] : null
+  }, [todasSems, iniActual])
+
+  // Datos período actual
   const datosActual = useMemo(() =>
     semsActual.map(s => {
       const rows = prodFiltrada.filter(r => r.fecha >= s.ini && r.fecha <= s.fin)
-      const diasUnicos = new Set(rows.map(r => r.fecha)).size
+      const diasUnicos = [...new Set(rows.map(r => r.fecha))].sort()
       const total = rows.reduce((a, r) => a + Number(r.total), 0)
-      return { ...s, total, dias: diasUnicos, promDia: diasUnicos ? total / diasUnicos : 0, regs: rows.length }
+      return {
+        ...s,
+        total,
+        dias: diasUnicos.length,
+        diasFechas: diasUnicos,
+        promDia: diasUnicos.length ? total / diasUnicos.length : 0,
+        regs: rows.length,
+      }
     }), [semsActual, prodFiltrada])
 
-  // Histórico — calcula promedio DIARIO como base de comparación
+  // Para cada semana del período actual, calcular la semana anterior
+  // cortada al mismo número de días activos
+  const datosComparativo = useMemo(() =>
+    datosActual.map(d => {
+      if (!semAntDirecta || d.dias === 0) return null
+      // Obtener los primeros N días activos de la semana anterior equivalente
+      // La semana anterior a ESTA semana específica
+      const iniSemAnt = new Date(d.ini + 'T12:00:00')
+      iniSemAnt.setDate(iniSemAnt.getDate() - 7)
+      const finSemAnt = new Date(d.fin + 'T12:00:00')
+      finSemAnt.setDate(finSemAnt.getDate() - 7)
+      const iniStr = iniSemAnt.toISOString().split('T')[0]
+      const finStr = finSemAnt.toISOString().split('T')[0]
+
+      const diasEquiv = primerNDiasActivos(prodFiltrada, iniStr, finStr, d.dias)
+      if (!diasEquiv.length) return null
+
+      const totalEquiv = prodFiltrada
+        .filter(r => diasEquiv.includes(r.fecha))
+        .reduce((a, r) => a + Number(r.total), 0)
+      const promDiaEquiv = diasEquiv.length ? totalEquiv / diasEquiv.length : 0
+      const deltaVsEquiv = promDiaEquiv ? ((d.promDia - promDiaEquiv) / promDiaEquiv) * 100 : null
+
+      const labelAnt = iniSemAnt.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) +
+        ' – ' + finSemAnt.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: '2-digit' })
+
+      return {
+        label: labelAnt,
+        dias: diasEquiv.length,
+        total: totalEquiv,
+        promDia: promDiaEquiv,
+        deltaVsEquiv,
+      }
+    }), [datosActual, prodFiltrada, semAntDirecta])
+
+  // Histórico — promedio DIARIO
   const histRef = useMemo(() => {
     if (!semsRef.length) return { promSemanal: 0, promDiario: 0, totalSems: 0 }
     const datos = semsRef.map(s => {
@@ -113,19 +172,15 @@ export default function Rendimiento() {
     return { promSemanal, promDiario, totalSems: datos.length }
   }, [semsRef, prodFiltrada])
 
-  // KPIs — comparación por día activo
+  // KPIs
   const totalActual = datosActual.reduce((a, d) => a + d.total, 0)
   const semsConDatos = datosActual.filter(d => d.total > 0)
   const promDiarioActual = semsConDatos.length
     ? semsConDatos.reduce((a, d) => a + d.promDia, 0) / semsConDatos.length
     : 0
-  // Delta principal: promedio diario actual vs promedio diario histórico
   const deltaDiario = histRef.promDiario ? ((promDiarioActual - histRef.promDiario) / histRef.promDiario) * 100 : null
-
   const maxSem = datosActual.reduce((a, d) => d.promDia > a.promDia ? d : a, { promDia: 0, label: '—' })
   const minSem = semsConDatos.length ? semsConDatos.reduce((a, d) => d.promDia < a.promDia ? d : a, semsConDatos[0]) : null
-
-  // Tendencia: compara promedio diario de las últimas 2 semanas con datos
   const ultimas2 = semsConDatos.slice(-2)
   const tendencia = ultimas2.length === 2 && ultimas2[0].promDia > 0
     ? ((ultimas2[1].promDia - ultimas2[0].promDia) / ultimas2[0].promDia) * 100
@@ -152,8 +207,6 @@ export default function Rendimiento() {
       const totalHist = rowsHist.reduce((a, r) => a + Number(r.total), 0)
       const diasHist = new Set(rowsHist.map(r => r.fecha)).size
       const promDiaHist = diasHist ? totalHist / diasHist : 0
-
-      // Delta normalizado por día
       const delta = promDiaHist ? ((promDiaAct - promDiaHist) / promDiaHist) * 100 : null
 
       return { id: c.id, nombre: c.nombre, color: COLORES[i % COLORES.length], totalAct, dias: diasAct, promDiaAct, promDiaHist, delta }
@@ -187,8 +240,6 @@ export default function Rendimiento() {
       const totalHist = rowsHist.reduce((a, r) => a + Number(r.total), 0)
       const diasHist = new Set(rowsHist.map(r => r.fecha)).size
       const promDiaHist = diasHist ? totalHist / diasHist : 0
-
-      // Delta normalizado por día
       const delta = promDiaHist ? ((promDiaAct - promDiaHist) / promDiaHist) * 100 : null
 
       return { id: c.id, nombre: c.nombre, unidad: c.unidad, totalAct, cantAct, promUnitAct, promDiaAct, promDiaHist, delta }
@@ -264,7 +315,7 @@ export default function Rendimiento() {
             Referencia: <span className="font-medium" style={{ color: 'var(--tc-text)' }}>{labelRef}</span>
             {' · '}Prom. diario histórico: <span className="font-medium" style={{ color: 'var(--tc-text)' }}>{fmt$(histRef.promDiario)}</span>
             {' · '}Prom. semanal histórico: <span className="font-medium" style={{ color: 'var(--tc-text)' }}>{fmt$(histRef.promSemanal)}</span>
-            <span className="ml-2 italic">· Todos los deltas (Δ) comparan promedio diario para una comparación justa entre semanas completas e incompletas</span>
+            <span className="ml-2 italic">· Δ compara prom. diario para una comparación justa entre semanas completas e incompletas</span>
           </div>
         )}
       </div>
@@ -295,11 +346,11 @@ export default function Rendimiento() {
         </div>
       </div>
 
-      {/* Tabla semana a semana */}
+      {/* Tabla semana a semana con fila comparativa */}
       <div className="card mb-4">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium">Detalle semanal vs referencia histórica</span>
-          <span className="text-xs text-gray-400 italic">Δ compara prom. diario — válido aunque la semana esté incompleta</span>
+          <span className="text-sm font-medium">Detalle semanal vs semana anterior (mismos días)</span>
+          <span className="text-xs text-gray-400 italic">Fila gris = semana anterior cortada al mismo nº de días activos</span>
         </div>
         <table className="w-full">
           <thead>
@@ -310,26 +361,43 @@ export default function Rendimiento() {
               <th className="th text-right">Prom. diario</th>
               <th className="th text-right">Prom. diario hist.</th>
               <th className="th text-right">Δ vs histórico</th>
+              <th className="th text-right">Δ vs sem ant. (mismo período)</th>
             </tr>
           </thead>
           <tbody>
             {datosActual.map((d, i) => {
-              // Delta por día activo: justo para semanas incompletas
-              const delta = histRef.promDiario && d.promDia ? ((d.promDia - histRef.promDiario) / histRef.promDiario) * 100 : null
+              const comp = datosComparativo[i]
+              const deltaHist = histRef.promDiario && d.promDia ? ((d.promDia - histRef.promDiario) / histRef.promDiario) * 100 : null
               return (
-                <tr key={i}>
-                  <td className="td text-xs">
-                    {d.label}
-                    {d.dias > 0 && d.dias < 7 && (
-                      <span className="ml-1.5 text-xs text-amber-500 font-medium">({d.dias} días)</span>
-                    )}
-                  </td>
-                  <td className="td text-right">{d.dias || <span className="text-gray-400">—</span>}</td>
-                  <td className="td text-right font-medium">{d.total ? fmt$(d.total) : <span className="text-gray-400">—</span>}</td>
-                  <td className="td text-right text-xs font-medium">{d.promDia ? fmt$(d.promDia) : <span className="text-gray-400">—</span>}</td>
-                  <td className="td text-right text-xs text-gray-400">{histRef.promDiario ? fmt$(histRef.promDiario) : '—'}</td>
-                  <td className="td text-right">{d.promDia ? deltaBadge(delta) : <span className="text-xs text-gray-400">Sin datos</span>}</td>
-                </tr>
+                <>
+                  {/* Fila semana actual */}
+                  <tr key={`act-${i}`}>
+                    <td className="td text-xs font-medium">
+                      {d.label}
+                      {d.dias > 0 && d.dias < 7 && (
+                        <span className="ml-1.5 text-xs text-amber-500 font-medium">({d.dias} días)</span>
+                      )}
+                    </td>
+                    <td className="td text-right">{d.dias || <span className="text-gray-400">—</span>}</td>
+                    <td className="td text-right font-medium">{d.total ? fmt$(d.total) : <span className="text-gray-400">—</span>}</td>
+                    <td className="td text-right text-xs font-medium">{d.promDia ? fmt$(d.promDia) : <span className="text-gray-400">—</span>}</td>
+                    <td className="td text-right text-xs text-gray-400">{histRef.promDiario ? fmt$(histRef.promDiario) : '—'}</td>
+                    <td className="td text-right">{d.promDia ? deltaBadge(deltaHist) : <span className="text-xs text-gray-400">—</span>}</td>
+                    <td className="td text-right">{comp ? deltaBadge(comp.deltaVsEquiv) : <span className="text-xs text-gray-400">—</span>}</td>
+                  </tr>
+                  {/* Fila comparativa semana anterior (mismos días) */}
+                  {comp && (
+                    <tr key={`comp-${i}`} style={{ background: 'var(--tc-bg-subtle, rgba(0,0,0,0.03))' }}>
+                      <td className="td text-xs text-gray-400 pl-6">
+                        ↳ Sem ant. {comp.label} · primeros {comp.dias} días
+                      </td>
+                      <td className="td text-right text-xs text-gray-400">{comp.dias}</td>
+                      <td className="td text-right text-xs text-gray-400">{fmt$(comp.total)}</td>
+                      <td className="td text-right text-xs text-gray-400">{fmt$(comp.promDia)}</td>
+                      <td className="td" colSpan={3} />
+                    </tr>
+                  )}
+                </>
               )
             })}
           </tbody>
