@@ -4,14 +4,12 @@ import { getSemanas } from '../lib/fechas'
 
 const COLORES = ['#378ADD','#1D9E75','#BA7517','#D85A30','#7F77DD','#D4537E','#639922','#E24B4A']
 
-// Genera todas las semanas que existen en los datos de producción
 function todasLasSemanas(produccion) {
   if (!produccion.length) return []
   const fechas = produccion.map(r => r.fecha).sort()
   const ini = new Date(fechas[0] + 'T12:00:00')
   const fin = new Date(fechas[fechas.length - 1] + 'T12:00:00')
   const sems = []
-  // Encontrar el viernes anterior o igual a ini
   const dow = ini.getDay()
   const diasDesdeViernes = dow === 5 ? 0 : dow === 6 ? 1 : dow + 2
   const primerViernes = new Date(ini)
@@ -57,29 +55,24 @@ function MiniBar({ pct, color }) {
 
 export default function Rendimiento() {
   const db = useDB()
-  const [periodoActual, setPeriodoActual] = useState('4') // '1','4','8','12' semanas
-  const [refHistorico, setRefHistorico] = useState('todo') // 'todo','sem_ant','mes_ant','4sem','8sem'
+  const [periodoActual, setPeriodoActual] = useState('4')
+  const [refHistorico, setRefHistorico] = useState('todo')
   const [filtroCuad, setFiltroCuad] = useState('')
   const [filtroConc, setFiltroConc] = useState('')
 
   const fmt$ = db.fmt$
   const cuadsSem = db.cuadrillas.filter(c => c.esquema === 'Semanal' || c.esquema === 'Ambas')
 
-  // Semanas del período actual (las más recientes)
   const semsActual = useMemo(() => getSemanas(Number(periodoActual)), [periodoActual])
   const iniActual = semsActual[0]?.ini
   const finActual = semsActual[semsActual.length - 1]?.fin
 
-  // Todas las semanas históricas
   const todasSems = useMemo(() => todasLasSemanas(db.produccion), [db.produccion])
 
-  // Semanas de referencia según el filtro
   const semsRef = useMemo(() => {
     if (!todasSems.length) return []
-    // Excluir semanas que solapan con el período actual
     const semsAntes = todasSems.filter(s => s.fin < iniActual)
     if (!semsAntes.length) return []
-
     if (refHistorico === 'todo') return semsAntes
     if (refHistorico === 'sem_ant') return semsAntes.slice(-1)
     if (refHistorico === 'mes_ant') return semsAntes.slice(-4)
@@ -88,14 +81,13 @@ export default function Rendimiento() {
     return semsAntes
   }, [todasSems, iniActual, refHistorico])
 
-  // Datos filtrados por cuadrilla y concepto
   const prodFiltrada = useMemo(() =>
     db.produccion.filter(r =>
       (!filtroCuad || r.cuadrilla_id === filtroCuad) &&
       (!filtroConc || r.concepto_id === filtroConc)
     ), [db.produccion, filtroCuad, filtroConc])
 
-  // Total por semana (período actual)
+  // Datos período actual — incluye promDia para normalización
   const datosActual = useMemo(() =>
     semsActual.map(s => {
       const rows = prodFiltrada.filter(r => r.fecha >= s.ini && r.fecha <= s.fin)
@@ -104,7 +96,7 @@ export default function Rendimiento() {
       return { ...s, total, dias: diasUnicos, promDia: diasUnicos ? total / diasUnicos : 0, regs: rows.length }
     }), [semsActual, prodFiltrada])
 
-  // Promedios históricos de referencia
+  // Histórico — calcula promedio DIARIO como base de comparación
   const histRef = useMemo(() => {
     if (!semsRef.length) return { promSemanal: 0, promDiario: 0, totalSems: 0 }
     const datos = semsRef.map(s => {
@@ -112,7 +104,7 @@ export default function Rendimiento() {
       const dias = new Set(rows.map(r => r.fecha)).size
       const total = rows.reduce((a, r) => a + Number(r.total), 0)
       return { total, dias }
-    }).filter(d => d.total > 0) // excluir semanas vacías
+    }).filter(d => d.total > 0)
     if (!datos.length) return { promSemanal: 0, promDiario: 0, totalSems: 0 }
     const promSemanal = datos.reduce((a, d) => a + d.total, 0) / datos.length
     const totalDias = datos.reduce((a, d) => a + d.dias, 0)
@@ -121,21 +113,25 @@ export default function Rendimiento() {
     return { promSemanal, promDiario, totalSems: datos.length }
   }, [semsRef, prodFiltrada])
 
-  // KPIs generales del período actual
+  // KPIs — comparación por día activo
   const totalActual = datosActual.reduce((a, d) => a + d.total, 0)
   const semsConDatos = datosActual.filter(d => d.total > 0)
-  const promActual = semsConDatos.length ? totalActual / semsConDatos.length : 0
-  const deltaProm = histRef.promSemanal ? ((promActual - histRef.promSemanal) / histRef.promSemanal) * 100 : null
-  const maxSem = datosActual.reduce((a, d) => d.total > a.total ? d : a, { total: 0, label: '—' })
-  const minSem = semsConDatos.length ? semsConDatos.reduce((a, d) => d.total < a.total ? d : a, semsConDatos[0]) : null
+  const promDiarioActual = semsConDatos.length
+    ? semsConDatos.reduce((a, d) => a + d.promDia, 0) / semsConDatos.length
+    : 0
+  // Delta principal: promedio diario actual vs promedio diario histórico
+  const deltaDiario = histRef.promDiario ? ((promDiarioActual - histRef.promDiario) / histRef.promDiario) * 100 : null
 
-  // Tendencia: compara últimas 2 semanas con datos
+  const maxSem = datosActual.reduce((a, d) => d.promDia > a.promDia ? d : a, { promDia: 0, label: '—' })
+  const minSem = semsConDatos.length ? semsConDatos.reduce((a, d) => d.promDia < a.promDia ? d : a, semsConDatos[0]) : null
+
+  // Tendencia: compara promedio diario de las últimas 2 semanas con datos
   const ultimas2 = semsConDatos.slice(-2)
-  const tendencia = ultimas2.length === 2
-    ? ((ultimas2[1].total - ultimas2[0].total) / ultimas2[0].total) * 100
+  const tendencia = ultimas2.length === 2 && ultimas2[0].promDia > 0
+    ? ((ultimas2[1].promDia - ultimas2[0].promDia) / ultimas2[0].promDia) * 100
     : null
 
-  // Rendimiento por cuadrilla
+  // Rendimiento por cuadrilla — normalizado por día
   const rendCuadrilla = useMemo(() => {
     const cuads = filtroCuad ? cuadsSem.filter(c => c.id === filtroCuad) : cuadsSem
     return cuads.map((c, i) => {
@@ -145,31 +141,29 @@ export default function Rendimiento() {
       )
       const totalAct = rowsAct.reduce((a, r) => a + Number(r.total), 0)
       const diasAct = new Set(rowsAct.map(r => r.fecha)).size
+      const promDiaAct = diasAct ? totalAct / diasAct : 0
 
-      // histórico de referencia para esta cuadrilla
       const rowsHist = semsRef.flatMap(s =>
         db.produccion.filter(r =>
           r.cuadrilla_id === c.id && r.fecha >= s.ini && r.fecha <= s.fin &&
           (!filtroConc || r.concepto_id === filtroConc)
         )
       )
-      const semsHistConDatos = semsRef.filter(s => {
-        const t = rowsHist.filter(r => r.fecha >= s.ini && r.fecha <= s.fin).reduce((a, r) => a + Number(r.total), 0)
-        return t > 0
-      })
       const totalHist = rowsHist.reduce((a, r) => a + Number(r.total), 0)
-      const promHistSem = semsHistConDatos.length ? totalHist / semsHistConDatos.length : 0
-      const promActSem = semsConDatos.length ? totalAct / semsConDatos.length : 0
-      const delta = promHistSem ? ((promActSem - promHistSem) / promHistSem) * 100 : null
+      const diasHist = new Set(rowsHist.map(r => r.fecha)).size
+      const promDiaHist = diasHist ? totalHist / diasHist : 0
 
-      return { id: c.id, nombre: c.nombre, color: COLORES[i % COLORES.length], totalAct, dias: diasAct, promActSem, promHistSem, delta }
-    }).filter(r => r.totalAct > 0 || semsRef.length > 0)
+      // Delta normalizado por día
+      const delta = promDiaHist ? ((promDiaAct - promDiaHist) / promDiaHist) * 100 : null
+
+      return { id: c.id, nombre: c.nombre, color: COLORES[i % COLORES.length], totalAct, dias: diasAct, promDiaAct, promDiaHist, delta }
+    }).filter(r => r.totalAct > 0)
       .sort((a, b) => b.totalAct - a.totalAct)
-  }, [db.produccion, cuadsSem, iniActual, finActual, semsRef, filtroCuad, filtroConc, semsConDatos.length])
+  }, [db.produccion, cuadsSem, iniActual, finActual, semsRef, filtroCuad, filtroConc])
 
   const totalCuads = rendCuadrilla.reduce((a, r) => a + r.totalAct, 0) || 1
 
-  // Rendimiento por concepto
+  // Rendimiento por concepto — normalizado por día
   const rendConcepto = useMemo(() => {
     const concs = filtroConc ? db.conceptos.filter(c => c.id === filtroConc) : db.conceptos
     return concs.map(c => {
@@ -181,6 +175,8 @@ export default function Rendimiento() {
       const totalAct = rowsAct.reduce((a, r) => a + Number(r.total), 0)
       const cantAct = rowsAct.reduce((a, r) => a + Number(r.cantidad), 0)
       const promUnitAct = cantAct ? totalAct / cantAct : 0
+      const diasAct = new Set(rowsAct.map(r => r.fecha)).size
+      const promDiaAct = diasAct ? totalAct / diasAct : 0
 
       const rowsHist = semsRef.flatMap(s =>
         db.produccion.filter(r =>
@@ -188,18 +184,16 @@ export default function Rendimiento() {
           (!filtroCuad || r.cuadrilla_id === filtroCuad)
         )
       )
-      const semsHistConDatos = semsRef.filter(s => {
-        const t = rowsHist.filter(r => r.fecha >= s.ini && r.fecha <= s.fin).reduce((a, r) => a + Number(r.total), 0)
-        return t > 0
-      })
       const totalHist = rowsHist.reduce((a, r) => a + Number(r.total), 0)
-      const promHistSem = semsHistConDatos.length ? totalHist / semsHistConDatos.length : 0
-      const promActSem = semsConDatos.length ? totalAct / semsConDatos.length : 0
-      const delta = promHistSem ? ((promActSem - promHistSem) / promHistSem) * 100 : null
+      const diasHist = new Set(rowsHist.map(r => r.fecha)).size
+      const promDiaHist = diasHist ? totalHist / diasHist : 0
 
-      return { id: c.id, nombre: c.nombre, unidad: c.unidad, totalAct, cantAct, promUnitAct, promActSem, promHistSem, delta }
+      // Delta normalizado por día
+      const delta = promDiaHist ? ((promDiaAct - promDiaHist) / promDiaHist) * 100 : null
+
+      return { id: c.id, nombre: c.nombre, unidad: c.unidad, totalAct, cantAct, promUnitAct, promDiaAct, promDiaHist, delta }
     }).filter(Boolean).sort((a, b) => b.totalAct - a.totalAct)
-  }, [db.produccion, db.conceptos, iniActual, finActual, semsRef, filtroCuad, filtroConc, semsConDatos.length])
+  }, [db.produccion, db.conceptos, iniActual, finActual, semsRef, filtroCuad, filtroConc])
 
   const totalConcs = rendConcepto.reduce((a, r) => a + r.totalAct, 0) || 1
 
@@ -223,7 +217,7 @@ export default function Rendimiento() {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-lg font-medium">Rendimiento</h2>
-          <div className="text-xs text-gray-400">Análisis de tendencia vs histórico</div>
+          <div className="text-xs text-gray-400">Análisis de tendencia · comparación normalizada por día activo</div>
         </div>
       </div>
 
@@ -231,7 +225,6 @@ export default function Rendimiento() {
       <div className="card mb-4">
         <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Filtros</div>
         <div className="flex flex-wrap gap-3">
-          {/* Período actual */}
           <div>
             <div className="text-xs text-gray-400 mb-1">Período a analizar</div>
             <div className="flex gap-1">
@@ -241,7 +234,6 @@ export default function Rendimiento() {
               ))}
             </div>
           </div>
-          {/* Referencia histórica */}
           <div>
             <div className="text-xs text-gray-400 mb-1">Comparar contra</div>
             <select className="input text-xs py-1" value={refHistorico} onChange={e => setRefHistorico(e.target.value)}>
@@ -252,7 +244,6 @@ export default function Rendimiento() {
               <option value="8sem">Últimas 8 semanas</option>
             </select>
           </div>
-          {/* Cuadrilla */}
           <div>
             <div className="text-xs text-gray-400 mb-1">Cuadrilla</div>
             <select className="input text-xs py-1 w-44" value={filtroCuad} onChange={e => setFiltroCuad(e.target.value)}>
@@ -260,7 +251,6 @@ export default function Rendimiento() {
               {cuadsSem.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
           </div>
-          {/* Concepto */}
           <div>
             <div className="text-xs text-gray-400 mb-1">Concepto</div>
             <select className="input text-xs py-1 w-44" value={filtroConc} onChange={e => setFiltroConc(e.target.value)}>
@@ -272,8 +262,9 @@ export default function Rendimiento() {
         {semsRef.length > 0 && (
           <div className="text-xs text-gray-400 mt-2">
             Referencia: <span className="font-medium" style={{ color: 'var(--tc-text)' }}>{labelRef}</span>
-            {' · '}Promedio histórico semanal: <span className="font-medium" style={{ color: 'var(--tc-text)' }}>{fmt$(histRef.promSemanal)}</span>
-            {' · '}Promedio histórico diario: <span className="font-medium" style={{ color: 'var(--tc-text)' }}>{fmt$(histRef.promDiario)}</span>
+            {' · '}Prom. diario histórico: <span className="font-medium" style={{ color: 'var(--tc-text)' }}>{fmt$(histRef.promDiario)}</span>
+            {' · '}Prom. semanal histórico: <span className="font-medium" style={{ color: 'var(--tc-text)' }}>{fmt$(histRef.promSemanal)}</span>
+            <span className="ml-2 italic">· Todos los deltas (Δ) comparan promedio diario para una comparación justa entre semanas completas e incompletas</span>
           </div>
         )}
       </div>
@@ -283,30 +274,33 @@ export default function Rendimiento() {
         <div className="metric">
           <div className="metric-label">Tendencia</div>
           <div className="metric-value" style={{ fontSize: 16 }}>{labelTendencia ?? <span className="text-gray-400 text-sm">Sin datos suficientes</span>}</div>
-          <div className="metric-sub">Últimas 2 semanas con producción</div>
+          <div className="metric-sub">Prom. diario: sem actual vs anterior</div>
         </div>
         <div className="metric">
-          <div className="metric-label">Promedio semanal actual</div>
-          <div className="metric-value">{fmt$(promActual)}</div>
+          <div className="metric-label">Prom. diario actual</div>
+          <div className="metric-value">{fmt$(promDiarioActual)}</div>
           <div className="metric-sub flex items-center gap-1">
-            vs histórico {deltaBadge(deltaProm)}
+            vs histórico {deltaBadge(deltaDiario)}
           </div>
         </div>
         <div className="metric">
-          <div className="metric-label">Mejor semana del período</div>
-          <div className="metric-value">{fmt$(maxSem.total)}</div>
+          <div className="metric-label">Mejor día promedio</div>
+          <div className="metric-value">{fmt$(maxSem.promDia)}</div>
           <div className="metric-sub">{maxSem.label}</div>
         </div>
         <div className="metric">
-          <div className="metric-label">Semana más baja</div>
-          <div className="metric-value">{minSem ? fmt$(minSem.total) : '—'}</div>
+          <div className="metric-label">Día promedio más bajo</div>
+          <div className="metric-value">{minSem ? fmt$(minSem.promDia) : '—'}</div>
           <div className="metric-sub">{minSem?.label ?? '—'}</div>
         </div>
       </div>
 
       {/* Tabla semana a semana */}
       <div className="card mb-4">
-        <div className="text-sm font-medium mb-3">Detalle semanal vs referencia histórica</div>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium">Detalle semanal vs referencia histórica</span>
+          <span className="text-xs text-gray-400 italic">Δ compara prom. diario — válido aunque la semana esté incompleta</span>
+        </div>
         <table className="w-full">
           <thead>
             <tr>
@@ -314,21 +308,27 @@ export default function Rendimiento() {
               <th className="th text-right">Días activos</th>
               <th className="th text-right">Total</th>
               <th className="th text-right">Prom. diario</th>
-              <th className="th text-right">Ref. histórica</th>
+              <th className="th text-right">Prom. diario hist.</th>
               <th className="th text-right">Δ vs histórico</th>
             </tr>
           </thead>
           <tbody>
             {datosActual.map((d, i) => {
-              const delta = histRef.promSemanal ? ((d.total - histRef.promSemanal) / histRef.promSemanal) * 100 : null
+              // Delta por día activo: justo para semanas incompletas
+              const delta = histRef.promDiario && d.promDia ? ((d.promDia - histRef.promDiario) / histRef.promDiario) * 100 : null
               return (
                 <tr key={i}>
-                  <td className="td text-xs">{d.label}</td>
+                  <td className="td text-xs">
+                    {d.label}
+                    {d.dias > 0 && d.dias < 7 && (
+                      <span className="ml-1.5 text-xs text-amber-500 font-medium">({d.dias} días)</span>
+                    )}
+                  </td>
                   <td className="td text-right">{d.dias || <span className="text-gray-400">—</span>}</td>
                   <td className="td text-right font-medium">{d.total ? fmt$(d.total) : <span className="text-gray-400">—</span>}</td>
-                  <td className="td text-right text-xs">{d.promDia ? fmt$(d.promDia) : <span className="text-gray-400">—</span>}</td>
-                  <td className="td text-right text-xs text-gray-400">{histRef.promSemanal ? fmt$(histRef.promSemanal) : '—'}</td>
-                  <td className="td text-right">{d.total ? deltaBadge(delta) : <span className="text-xs text-gray-400">Sin datos</span>}</td>
+                  <td className="td text-right text-xs font-medium">{d.promDia ? fmt$(d.promDia) : <span className="text-gray-400">—</span>}</td>
+                  <td className="td text-right text-xs text-gray-400">{histRef.promDiario ? fmt$(histRef.promDiario) : '—'}</td>
+                  <td className="td text-right">{d.promDia ? deltaBadge(delta) : <span className="text-xs text-gray-400">Sin datos</span>}</td>
                 </tr>
               )
             })}
@@ -338,7 +338,10 @@ export default function Rendimiento() {
 
       {/* Rendimiento por cuadrilla */}
       <div className="card mb-4">
-        <div className="text-sm font-medium mb-3">Rendimiento por cuadrilla</div>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium">Rendimiento por cuadrilla</span>
+          <span className="text-xs text-gray-400 italic">Δ por prom. diario</span>
+        </div>
         {rendCuadrilla.length === 0
           ? <div className="text-gray-400 text-sm py-4 text-center">Sin datos en el período.</div>
           : <table className="w-full">
@@ -346,8 +349,9 @@ export default function Rendimiento() {
               <tr>
                 <th className="th">Cuadrilla</th>
                 <th className="th text-right">Total período</th>
-                <th className="th text-right">Prom. semanal</th>
-                <th className="th text-right">Ref. histórica</th>
+                <th className="th text-right">Días activos</th>
+                <th className="th text-right">Prom. diario</th>
+                <th className="th text-right">Prom. diario hist.</th>
                 <th className="th text-right">Δ</th>
                 <th className="th">% del total</th>
               </tr>
@@ -360,8 +364,9 @@ export default function Rendimiento() {
                     {r.nombre}
                   </td>
                   <td className="td text-right font-medium">{fmt$(r.totalAct)}</td>
-                  <td className="td text-right text-xs">{fmt$(r.promActSem)}</td>
-                  <td className="td text-right text-xs text-gray-400">{r.promHistSem ? fmt$(r.promHistSem) : '—'}</td>
+                  <td className="td text-right text-xs">{r.dias}</td>
+                  <td className="td text-right text-xs">{fmt$(r.promDiaAct)}</td>
+                  <td className="td text-right text-xs text-gray-400">{r.promDiaHist ? fmt$(r.promDiaHist) : '—'}</td>
                   <td className="td text-right">{deltaBadge(r.delta)}</td>
                   <td className="td" style={{ minWidth: 120 }}>
                     <MiniBar pct={(r.totalAct / totalCuads) * 100} color={r.color} />
@@ -375,7 +380,10 @@ export default function Rendimiento() {
 
       {/* Rendimiento por concepto */}
       <div className="card">
-        <div className="text-sm font-medium mb-3">Rendimiento por concepto</div>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium">Rendimiento por concepto</span>
+          <span className="text-xs text-gray-400 italic">Δ por prom. diario</span>
+        </div>
         {rendConcepto.length === 0
           ? <div className="text-gray-400 text-sm py-4 text-center">Sin datos en el período.</div>
           : <table className="w-full">
@@ -385,8 +393,8 @@ export default function Rendimiento() {
                 <th className="th text-right">Cantidad</th>
                 <th className="th text-right">Total período</th>
                 <th className="th text-right">Prom. unit.</th>
-                <th className="th text-right">Prom. sem.</th>
-                <th className="th text-right">Ref. histórica</th>
+                <th className="th text-right">Prom. diario</th>
+                <th className="th text-right">Prom. diario hist.</th>
                 <th className="th text-right">Δ</th>
                 <th className="th">% del total</th>
               </tr>
@@ -398,8 +406,8 @@ export default function Rendimiento() {
                   <td className="td text-right text-xs">{Number(r.cantAct).toLocaleString('es-MX', { maximumFractionDigits: 1 })} {r.unidad}</td>
                   <td className="td text-right font-medium">{fmt$(r.totalAct)}</td>
                   <td className="td text-right text-xs">{fmt$(r.promUnitAct)}</td>
-                  <td className="td text-right text-xs">{fmt$(r.promActSem)}</td>
-                  <td className="td text-right text-xs text-gray-400">{r.promHistSem ? fmt$(r.promHistSem) : '—'}</td>
+                  <td className="td text-right text-xs">{fmt$(r.promDiaAct)}</td>
+                  <td className="td text-right text-xs text-gray-400">{r.promDiaHist ? fmt$(r.promDiaHist) : '—'}</td>
                   <td className="td text-right">{deltaBadge(r.delta)}</td>
                   <td className="td" style={{ minWidth: 120 }}>
                     <MiniBar pct={(r.totalAct / totalConcs) * 100} color={COLORES[i % COLORES.length]} />
