@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useDB } from '../hooks/useDB'
 import { getSemanas } from '../lib/fechas'
 
@@ -369,9 +369,9 @@ export default function Rendimiento() {
               const comp = datosComparativo[i]
               const deltaHist = histRef.promDiario && d.promDia ? ((d.promDia - histRef.promDiario) / histRef.promDiario) * 100 : null
               return (
-                <>
+                <React.Fragment key={i}>
                   {/* Fila semana actual */}
-                  <tr key={`act-${i}`}>
+                  <tr>
                     <td className="td text-xs font-medium">
                       {d.label}
                       {d.dias > 0 && d.dias < 7 && (
@@ -397,7 +397,7 @@ export default function Rendimiento() {
                       <td className="td" colSpan={3} />
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               )
             })}
           </tbody>
