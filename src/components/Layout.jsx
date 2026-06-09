@@ -7,6 +7,7 @@ const navItems = [
   { section: 'Producción' },
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/graficas', label: 'Gráficas' },
+  { to: '/rendimiento', label: 'Rendimiento' },
   { to: '/produccion', label: 'Producción semanal' },
   { to: '/cn', label: 'Casos de Negocio (CN)' },
   { section: 'Cortes' },
@@ -81,7 +82,6 @@ export default function Layout() {
               <div style={{ fontSize: '11px' }}>{perfil.rol}</div>
             </div>
           )}
-          {/* Toggle tema oscuro */}
           <button onClick={() => setDark(d => !d)} style={{
             width: '100%', padding: '6px 12px', borderRadius: '7px',
             background: dark ? 'rgba(245,166,35,0.15)' : 'rgba(255,255,255,0.08)',

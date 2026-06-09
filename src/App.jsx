@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
 import Graficas from './pages/Graficas'
+import Rendimiento from './pages/Rendimiento'
 import Produccion from './pages/Produccion'
 import CasosNegocio from './pages/CasosNegocio'
 import Cuadrillas from './pages/Cuadrillas'
@@ -37,6 +38,7 @@ function AppRoutes() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="graficas" element={<Graficas />} />
+        <Route path="rendimiento" element={<Rendimiento />} />
         <Route path="produccion" element={<Produccion />} />
         <Route path="cn" element={<CasosNegocio />} />
         <Route path="cuadrillas" element={<Cuadrillas />} />
