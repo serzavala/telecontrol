@@ -6,7 +6,6 @@ import Asistente from './Asistente'
 const navItems = [
   { section: 'Producción' },
   { to: '/dashboard', label: 'Dashboard' },
-  { to: '/graficas', label: 'Gráficas' },
   { to: '/rendimiento', label: 'Rendimiento' },
   { to: '/produccion', label: 'Producción semanal' },
   { to: '/cn', label: 'Casos de Negocio (CN)' },
