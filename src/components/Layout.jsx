@@ -15,6 +15,7 @@ const navItems = [
   { to: '/historial', label: 'Historial de cortes' },
   { section: 'Catálogos' },
   { to: '/cuadrillas', label: 'Cuadrillas' },
+  { to: '/esquema', label: 'Esquema de cuadrillas' },
   { to: '/proyectos', label: 'Proyectos' },
   { to: '/conceptos', label: 'Conceptos' },
   { divider: true },
