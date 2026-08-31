@@ -357,3 +357,120 @@ export function generarPDFCierre({ cierre }) {
 
   doc.save(`cierre-${cierre.periodo_label.replace(/\s/g, '-').replace(/—/g, '')}.pdf`)
 }
+export function generarPDFEsquema({ grupos, totalCuadrillas, totalIntegrantes }) {
+  const doc = new jsPDF()
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
+  const hoy = new Date().toLocaleDateString('es-MX')
+  const LIM = pageH - 22
+
+  let y = addHeader(doc, 'ESQUEMA DE CUADRILLAS', 'Organizacion operativa 2026', [
+    { label: 'Fecha de emision', value: hoy },
+    { label: 'Cuadrillas', value: String(totalCuadrillas) },
+    { label: 'Integrantes', value: String(totalIntegrantes) },
+  ])
+
+  function bandaRama(texto) {
+    doc.setFillColor(15, 52, 96)
+    doc.rect(12, y, pageW - 24, 8, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9.5)
+    doc.setTextColor(255, 255, 255)
+    doc.text(String(texto).toUpperCase(), 16, y + 5.5)
+    y += 12
+  }
+
+  grupos.forEach(g => {
+    if (y + 34 > LIM) { doc.addPage(); y = 20 }
+    bandaRama(g.rama)
+
+    g.cuadrillas.forEach(c => {
+      const n = c.integrantes.length
+      const filas = Math.max(1, Math.ceil(n / 2))
+      const altura = 18 + filas * 5 + (c.notas ? 10 : 0)
+
+      if (y + altura > LIM) { doc.addPage(); y = 20; bandaRama(g.rama + ' (cont.)') }
+
+      doc.setFillColor(250, 251, 254)
+      doc.setDrawColor(205, 216, 234)
+      doc.setLineWidth(0.4)
+      doc.roundedRect(12, y, pageW - 24, altura, 2, 2, 'FD')
+
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.setTextColor(15, 52, 96)
+      doc.text(c.nombre, 17, y + 7)
+
+      if (c.actividad) {
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(8)
+        doc.setTextColor(146, 98, 0)
+        doc.text(c.actividad, pageW - 17, y + 7, { align: 'right' })
+      }
+
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7.5)
+      doc.setTextColor(110, 120, 145)
+      doc.text(`Responsable: ${c.responsable || '-'}   ·   ${n} integrante${n === 1 ? '' : 's'}`, 17, y + 12)
+
+      doc.setDrawColor(225, 232, 245)
+      doc.setLineWidth(0.3)
+      doc.line(17, y + 14.5, pageW - 17, y + 14.5)
+
+      const fy = y + 20
+      const colX = [19, pageW / 2 + 2]
+      c.integrantes.forEach((e, i) => {
+        const cx = colX[i % 2]
+        const cy = fy + Math.floor(i / 2) * 5
+        doc.setFont('helvetica', e.lider ? 'bold' : 'normal')
+        doc.setFontSize(8)
+        if (e.lider) doc.setTextColor(15, 52, 96); else doc.setTextColor(60, 65, 85)
+        const txt = `• ${e.nombre}${e.rol ? ' - ' + e.rol : ''}${e.lider ? ' (Lider)' : ''}`
+        doc.text(txt.length > 50 ? txt.slice(0, 49) + '...' : txt, cx, cy)
+      })
+
+      if (n === 0) {
+        doc.setFont('helvetica', 'italic')
+        doc.setFontSize(8)
+        doc.setTextColor(150, 155, 170)
+        doc.text('Sin integrantes asignados', 19, fy)
+      }
+
+            if (c.notas) {
+        const by = y + altura - 10
+        doc.setFillColor(255, 243, 220)
+        doc.setDrawColor(245, 166, 35)
+        doc.setLineWidth(0.3)
+        doc.roundedRect(17, by, pageW - 34, 7.5, 1, 1, 'FD')
+        doc.setFillColor(245, 166, 35)
+        doc.rect(17, by, 1.6, 7.5, 'F')
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(6.5)
+        doc.setTextColor(146, 98, 0)
+        doc.text('NOTA', 21, by + 3)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(8)
+        doc.setTextColor(120, 80, 0)
+        doc.text(String(c.notas).slice(0, 95), 32, by + 5)
+      }
+
+      y += altura + 5
+    })
+    y += 3
+  })
+
+  const paginas = doc.internal.getNumberOfPages()
+  for (let p = 1; p <= paginas; p++) {
+    doc.setPage(p)
+    doc.setDrawColor(15, 52, 96)
+    doc.setLineWidth(0.4)
+    doc.line(12, pageH - 14, pageW - 12, pageH - 14)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7.5)
+    doc.setTextColor(150, 150, 150)
+    doc.text('NOVUS — Innovacion y Futuro', 12, pageH - 9)
+    doc.text(`Pagina ${p} de ${paginas}`, pageW - 12, pageH - 9, { align: 'right' })
+  }
+
+  doc.save(`esquema-cuadrillas-${hoy.replace(/\//g, '-')}.pdf`)
+}
