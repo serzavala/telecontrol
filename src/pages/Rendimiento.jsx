@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useDB } from '../hooks/useDB'
 import { getSemanas } from '../lib/fechas'
+import ConsultaRango from '../components/ConsultaRango'
 
 const COLORES = ['#378ADD','#1D9E75','#BA7517','#D85A30','#7F77DD','#D4537E','#639922','#E24B4A']
 
@@ -271,6 +272,8 @@ export default function Rendimiento() {
           <div className="text-xs text-gray-400">Análisis de tendencia · comparación normalizada por día activo</div>
         </div>
       </div>
+
+      <ConsultaRango db={db} />
 
       {/* Filtros */}
       <div className="card mb-4">

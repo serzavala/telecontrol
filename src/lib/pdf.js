@@ -474,3 +474,79 @@ export function generarPDFEsquema({ grupos, totalCuadrillas, totalIntegrantes })
 
   doc.save(`esquema-cuadrillas-${hoy.replace(/\//g, '-')}.pdf`)
 }
+export function generarPDFRango({ grupos, desdeLabel, hastaLabel, total, dias, registros }) {
+  const doc = new jsPDF({ orientation: 'landscape' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
+  const hoy = new Date().toLocaleDateString('es-MX')
+  const periodo = desdeLabel === hastaLabel ? desdeLabel : `${desdeLabel} al ${hastaLabel}`
+
+  const startY = addHeader(doc, 'PRODUCCION POR PERIODO', 'Consulta de produccion 2026', [
+    { label: 'Fecha de emision', value: hoy },
+    { label: 'Periodo consultado', value: periodo },
+    { label: 'Dias con produccion', value: String(dias) },
+    { label: 'Registros', value: String(registros) },
+  ])
+
+  const body = []
+  grupos.forEach(g => {
+    body.push([
+      { content: `${g.nombre}  (${g.dias} dia${g.dias === 1 ? '' : 's'})`, colSpan: 4 },
+      { content: fmt$(g.total) },
+    ])
+    g.conceptos.forEach(c => {
+      body.push([
+        `   ${c.nombre}`,
+        Number(c.cantidad).toLocaleString('es-MX', { maximumFractionDigits: 2 }),
+        c.unidad || '-',
+        fmt$(c.promUnit),
+        fmt$(c.total),
+      ])
+    })
+  })
+
+  doc.autoTable({
+    startY,
+    head: [['Cuadrilla / Concepto', 'Cantidad', 'Unidad', 'P. unitario', 'Importe']],
+    body,
+    styles: { fontSize: 8.5, cellPadding: 2.8, font: 'helvetica', textColor: [40, 40, 40] },
+    headStyles: { fillColor: [15, 52, 96], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+    columnStyles: {
+      0: { cellWidth: 110 },
+      1: { cellWidth: 38, halign: 'right' },
+      2: { cellWidth: 42 },
+      3: { cellWidth: 32, halign: 'right' },
+      4: { cellWidth: 36, halign: 'right', fontStyle: 'bold' },
+    },
+    margin: { left: 12, right: 12 },
+    didParseCell: (data) => {
+      if (data.row.raw[0] && typeof data.row.raw[0] === 'object') {
+        data.cell.styles.fillColor = [230, 236, 250]
+        data.cell.styles.fontStyle = 'bold'
+        data.cell.styles.textColor = [15, 52, 96]
+      }
+    },
+  })
+
+  let y = doc.lastAutoTable.finalY + 8
+  if (y + 22 > pageH - 12) { doc.addPage(); y = 20 }
+  doc.setFillColor(15, 52, 96)
+  doc.rect(12, y, pageW - 24, 16, 'F')
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(255, 255, 255)
+  doc.text(`${registros} registros  ·  ${dias} dia${dias === 1 ? '' : 's'} con produccion  ·  ${periodo}`, 17, y + 6.5)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.text('TOTAL PRODUCCION:', pageW - 78, y + 6.5)
+  doc.setFontSize(13)
+  doc.setTextColor(245, 166, 35)
+  doc.text(fmt$(total), pageW - 17, y + 12, { align: 'right' })
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7.5)
+  doc.setTextColor(150, 150, 150)
+  doc.text('NOVUS — Innovacion y Futuro', pageW - 12, pageH - 8, { align: 'right' })
+
+  doc.save(`produccion-${desdeLabel === hastaLabel ? desdeLabel : desdeLabel + '_a_' + hastaLabel}.pdf`)
+}
