@@ -3,6 +3,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useState, useEffect } from 'react'
 import Asistente from './Asistente'
 
+
 const navItems = [
   { section: 'Producción' },
   { to: '/dashboard', label: 'Dashboard' },
@@ -38,6 +39,7 @@ export default function Layout() {
   const { perfil, signOut } = useAuth()
   const navigate = useNavigate()
   const [dark, setDark] = useState(() => localStorage.getItem('tc-tema') === 'oscuro')
+  
 
   useEffect(() => {
     if (dark) {
