@@ -110,6 +110,12 @@ export function useIG() {
     if (!error) load()
     return { error }
   }
+    async function addNominaLote(rows) {
+    if (!rows.length) return { error: null }
+    const { error } = await supabase.from('nomina').insert(rows.map(r => ({ ...r, user_id: user.id })))
+    if (!error) await load()
+    return { error }
+  }
   async function deleteNomina(id) {
     const { error } = await supabase.from('nomina').delete().eq('id', id)
     if (!error) load()
@@ -198,7 +204,7 @@ async function updateCierreDistribucion(id, distribucion) {
     addVehiculo, updateVehiculo, deleteVehiculo,
     addIngreso, deleteIngreso,
     addGasto, deleteGasto,
-    addNomina, deleteNomina,
+    addNomina, addNominaLote, deleteNomina,
     addPrestamo, aplicarDescuento,
     addCierre, updateCierreEstado,
      addDispersion, getDepositos, deleteDispersion,

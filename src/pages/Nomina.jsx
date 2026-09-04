@@ -17,11 +17,37 @@ export default function NominaPage() {
   const [form, setForm] = useState({ semana: '', anio: hoy.getFullYear(), cuadrilla_id: '', empleado_id: '', dias_trabajados: '6', sueldo_diario: '', viaticos: '0', anticipo_operativo: '0', descuento_prestamo: '0', fecha_pago: '' })
   const [saving, setSaving] = useState(false)
   const [autoModal, setAutoModal] = useState(false)
-  const [autoForm, setAutoForm] = useState({ semana: '', anio: hoy.getFullYear(), cuadrillas: [], viaticos_modo: 'empleado', viaticos_general: '0', fecha_pago: '' })
+  const [autoForm, setAutoForm] = useState({ semana: '', anio: hoy.getFullYear(), seleccionados: [], viaticos_modo: 'empleado', viaticos_general: '0', fecha_pago: '' })
   const [autoSaving, setAutoSaving] = useState(false)
   const setF = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
   const setEF = k => e => setEditForm(f => ({ ...f, [k]: e.target.value }))
   const setFilt = k => e => setFiltros(f => ({ ...f, [k]: e.target.value }))
+    // ── Generación automática: la base es SIEMPRE la lista de empleados activos ──
+  const normNombre = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
+  const autoSemana = parseInt(autoForm.semana), autoAnio = parseInt(autoForm.anio)
+  const idsConNomina = new Set(
+    ig.nomina.filter(n => Number(n.semana) === autoSemana && Number(n.anio) === autoAnio).map(n => n.empleado_id)
+  )
+  const nombresRepetidos = (() => {
+    const c = {}
+    ig.empleados.forEach(e => { const k = normNombre(e.nombre); c[k] = (c[k] || 0) + 1 })
+    return new Set(Object.keys(c).filter(k => c[k] > 1))
+  })()
+  const gruposAuto = [
+    ...db.cuadrillas.map(c => ({ id: c.id, nombre: c.nombre, emps: ig.empleados.filter(e => e.cuadrilla_id === c.id) })),
+    { id: 'sin', nombre: 'Sin cuadrilla', emps: ig.empleados.filter(e => !db.cuadrillas.some(c => c.id === e.cuadrilla_id)) },
+  ].filter(g => g.emps.length)
+  const toggleSel = (ids, on) => setAutoForm(f => ({
+    ...f,
+    seleccionados: on ? [...new Set([...f.seleccionados, ...ids])] : f.seleccionados.filter(id => !ids.includes(id)),
+  }))
+  function openAuto() {
+    setAutoForm({ semana: '', anio: hoy.getFullYear(), seleccionados: ig.empleados.map(e => e.id), viaticos_modo: 'empleado', viaticos_general: '0', fecha_pago: '' })
+    setAutoModal(true)
+  }
+  const porGenerar = [...new Set(autoForm.seleccionados)]
+    .map(id => ig.empleados.find(e => e.id === id))
+    .filter(e => e && !idsConNomina.has(e.id))
 
   const rows = ig.nomina.filter(r =>
     (!filtros.semana || r.semana == filtros.semana) &&
@@ -177,61 +203,39 @@ export default function NominaPage() {
     setForm({ semana: '', anio: hoy.getFullYear(), cuadrilla_id: '', empleado_id: '', dias_trabajados: '6', sueldo_diario: '', viaticos: '0', anticipo_operativo: '0', descuento_prestamo: '0', fecha_pago: '' })
   }
 
-  async function generarNominaAutomatica() {
+    async function generarNominaAutomatica() {
     if (!autoForm.semana) { alert('Selecciona la semana.'); return }
-    if (!autoForm.cuadrillas.length) { alert('Selecciona al menos una cuadrilla.'); return }
-
-    // Verificar duplicados — empleados que ya tienen nómina esta semana
-    const nominaExistente = ig.nomina.filter(n =>
-      n.semana === parseInt(autoForm.semana) && n.anio === parseInt(autoForm.anio)
-    )
-    const idsConNomina = new Set(nominaExistente.map(n => n.empleado_id))
-
-    const empleadosSeleccionados = ig.empleados.filter(e =>
-      autoForm.cuadrillas.includes(e.cuadrilla_id) && !idsConNomina.has(e.id)
-    )
-
-    if (empleadosSeleccionados.length === 0) {
-      alert(`Todos los empleados ya tienen nómina registrada para la semana ${autoForm.semana}.`)
-      setAutoSaving(false)
+    const omitidos = [...new Set(autoForm.seleccionados)].filter(id => idsConNomina.has(id)).length
+    if (!porGenerar.length) {
+      alert(`No hay empleados por generar para la semana ${autoForm.semana}. ${omitidos ? `${omitidos} ya tienen nómina.` : 'Selecciona al menos uno.'}`)
       return
     }
-
-    const omitidos = ig.empleados.filter(e => autoForm.cuadrillas.includes(e.cuadrilla_id) && idsConNomina.has(e.id)).length
-
-    if (!confirm(`Se crearán ${empleadosSeleccionados.length} registros de nómina.${omitidos > 0 ? ` ${omitidos} empleados omitidos (ya tienen nómina esta semana).` : ''}\n\n¿Continuar?`)) return
+    if (!confirm(`Se crearán ${porGenerar.length} registros de nómina.${omitidos ? ` ${omitidos} omitidos (ya tienen nómina esta semana).` : ''}\n\n¿Continuar?`)) return
 
     setAutoSaving(true)
-    let exitosos = 0
-    for (const e of empleadosSeleccionados) {
-      const diasTrabajados = 6
+    const diasTrabajados = 6
+    const filas = porGenerar.map(e => {
       const sd = Number(e.sueldo_diario)
       const ss = sd * diasTrabajados
       const viaticos = autoForm.viaticos_modo === 'empleado'
         ? Number(e.viaticos_default || 0)
-        : autoForm.viaticos_modo === 'general'
-          ? parseFloat(autoForm.viaticos_general || 0)
-          : 0
-      const { error } = await ig.addNomina({
-        semana: parseInt(autoForm.semana),
-        anio: parseInt(autoForm.anio),
-        cuadrilla_id: e.cuadrilla_id,
+        : autoForm.viaticos_modo === 'general' ? parseFloat(autoForm.viaticos_general || 0) : 0
+      return {
+        semana: autoSemana, anio: autoAnio,
+        cuadrilla_id: e.cuadrilla_id || null,
         empleado_id: e.id,
         dias_trabajados: diasTrabajados,
-        sueldo_diario: sd,
-        sueldo_semana: ss,
-        viaticos,
-        anticipo_operativo: 0,
-        descuento_prestamo: 0,
+        sueldo_diario: sd, sueldo_semana: ss, viaticos,
+        anticipo_operativo: 0, descuento_prestamo: 0,
         neto_pagar: ss + viaticos,
         fecha_pago: autoForm.fecha_pago || null,
-      })
-      if (!error) exitosos++
-    }
+      }
+    })
+    const { error } = await ig.addNominaLote(filas)
     setAutoSaving(false)
+    if (error) { alert('Error al generar nómina: ' + error.message); return }
     setAutoModal(false)
-    setAutoForm({ semana: '', anio: hoy.getFullYear(), cuadrillas: [], viaticos_modo: 'empleado', viaticos_general: '0', fecha_pago: '' })
-    alert(`Nómina generada: ${exitosos} registros creados correctamente.`)
+    alert(`Nómina generada: ${filas.length} registros creados.`)
   }
 
   return (
@@ -239,7 +243,7 @@ export default function NominaPage() {
       <div className="page-header">
         <div><h2>Nómina semanal</h2><div className="page-header-sub">Pagos por semana organizados por cuadrilla</div></div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-gold" onClick={() => setAutoModal(true)}>⚡ Generar nómina</button>
+          <button className="btn btn-gold" onClick={openAuto}>⚡ Generar nómina</button>
           <button className="btn" style={{ background: '#0F3460', color: '#fff', border: 'none' }} onClick={exportarPDF}>Exportar PDF</button>
           <button className="btn btn-primary" onClick={() => setModal(true)}>+ Registrar pago</button>
         </div>
@@ -473,14 +477,15 @@ export default function NominaPage() {
       </Modal>
 
       {/* Modal generación automática */}
+            {/* Modal generación automática */}
       <Modal open={autoModal} onClose={() => setAutoModal(false)} title="Generar nómina automática">
         <div className="space-y-3">
           <div style={{ background: '#E8F0FB', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#1A4FA0' }}>
-            Se generarán 6 días para todos los empleados de las cuadrillas seleccionadas. Si ya existe nómina para algún empleado en esa semana se omitirá automáticamente.
+            Base: lista de empleados activos. Se generan 6 días por persona seleccionada. Quien ya tenga nómina en esa semana aparece deshabilitado.
           </div>
-            <div className="form-row c3">
+          <div className="form-row c3">
             <div><label className="label">Semana # *</label>
-              <input className="input" type="number" min="1" max="52" placeholder="19" value={autoForm.semana}
+              <input className="input" type="number" min="1" max="53" placeholder="36" value={autoForm.semana}
                 onChange={e => setAutoForm(f => ({ ...f, semana: e.target.value }))} />
             </div>
             <div><label className="label">Año</label>
@@ -492,22 +497,50 @@ export default function NominaPage() {
                 onChange={e => setAutoForm(f => ({ ...f, fecha_pago: e.target.value }))} />
             </div>
           </div>
+
           <div>
-            <label className="label">Cuadrillas a incluir *</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-              {db.cuadrillas.map(c => (
-                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', color: 'var(--tc-text)' }}>
-                  <input type="checkbox" style={{ width: 'auto' }}
-                    checked={autoForm.cuadrillas.includes(c.id)}
-                    onChange={e => setAutoForm(f => ({
-                      ...f,
-                      cuadrillas: e.target.checked ? [...f.cuadrillas, c.id] : f.cuadrillas.filter(id => id !== c.id)
-                    }))} />
-                  {c.nombre} ({ig.empleados.filter(e => e.cuadrilla_id === c.id).length} empleados)
-                </label>
-              ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <label className="label" style={{ marginBottom: 0 }}>Empleados a incluir *</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => toggleSel(ig.empleados.map(e => e.id), true)}>Todos</button>
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => toggleSel(ig.empleados.map(e => e.id), false)}>Ninguno</button>
+              </div>
+            </div>
+            <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--tc-border)', borderRadius: 8 }}>
+              {gruposAuto.map(g => {
+                const ids = g.emps.map(e => e.id)
+                const marcados = ids.filter(id => autoForm.seleccionados.includes(id)).length
+                return (
+                  <div key={g.id}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#0F3460', color: '#fff', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                      <input type="checkbox" style={{ width: 'auto' }}
+                        checked={marcados === ids.length}
+                        ref={el => { if (el) el.indeterminate = marcados > 0 && marcados < ids.length }}
+                        onChange={e => toggleSel(ids, e.target.checked)} />
+                      {g.nombre} <span style={{ color: 'rgba(255,255,255,0.6)', fontWeight: 400 }}>· {marcados}/{ids.length}</span>
+                    </label>
+                    {g.emps.map(e => {
+                      const yaTiene = idsConNomina.has(e.id)
+                      const repetido = nombresRepetidos.has(normNombre(e.nombre))
+                      return (
+                        <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px 5px 24px', fontSize: 13, cursor: yaTiene ? 'default' : 'pointer', color: yaTiene ? 'var(--tc-text-muted)' : 'var(--tc-text)', background: repetido && !yaTiene ? 'rgba(245,166,35,0.12)' : 'transparent', borderBottom: '1px solid var(--tc-border)' }}>
+                          <input type="checkbox" style={{ width: 'auto' }} disabled={yaTiene}
+                            checked={!yaTiene && autoForm.seleccionados.includes(e.id)}
+                            onChange={ev => toggleSel([e.id], ev.target.checked)} />
+                          <span style={{ color: 'var(--tc-text-muted)', fontSize: 11, minWidth: 34 }}>{e.numero}</span>
+                          <span style={{ flex: 1 }}>{e.nombre}</span>
+                          <span style={{ fontSize: 11, color: 'var(--tc-text-muted)' }}>{ig.fmt$(e.sueldo_diario)}/día</span>
+                          {yaTiene && <span className="badge badge-green" style={{ fontSize: 10 }}>Ya tiene nómina</span>}
+                          {repetido && !yaTiene && <span className="badge badge-amber" style={{ fontSize: 10 }}>Nombre repetido</span>}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )
+              })}
             </div>
           </div>
+
           <div>
             <label className="label">Viáticos</label>
             <select className="input" value={autoForm.viaticos_modo} onChange={e => setAutoForm(f => ({ ...f, viaticos_modo: e.target.value }))}>
@@ -523,14 +556,13 @@ export default function NominaPage() {
             </div>
           )}
           <div style={{ background: 'var(--tc-bg)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: 'var(--tc-text-muted)' }}>
-            Empleados a registrar: <strong style={{ color: 'var(--tc-text)' }}>
-              {ig.empleados.filter(e => autoForm.cuadrillas.includes(e.cuadrilla_id)).length}
-            </strong>
+            Se generarán: <strong style={{ color: 'var(--tc-text)' }}>{porGenerar.length}</strong> registros
+            {autoForm.semana && idsConNomina.size > 0 && <> · <span style={{ color: '#1A7A45' }}>{idsConNomina.size} ya tienen nómina en la semana {autoForm.semana}</span></>}
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <button className="btn btn-outline" onClick={() => setAutoModal(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={generarNominaAutomatica} disabled={autoSaving}>
-              {autoSaving ? 'Generando...' : 'Generar nómina'}
+            <button className="btn btn-primary" onClick={generarNominaAutomatica} disabled={autoSaving || !porGenerar.length}>
+              {autoSaving ? 'Generando...' : `Generar nómina (${porGenerar.length})`}
             </button>
           </div>
         </div>
