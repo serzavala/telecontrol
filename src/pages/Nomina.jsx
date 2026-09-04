@@ -4,27 +4,52 @@ import { useDB } from '../hooks/useDB'
 import Modal from '../components/Modal'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
+import { getSemana, getSemanaISO, getOffsetDesdeSemana, fmtSemanaLabel } from '../lib/fechas'
 
-const FORM_INICIAL = (anio) => ({ semana: '', anio, cuadrilla_id: '', empleado_id: '', dias_trabajados: '6', sueldo_diario: '', viaticos: '0', anticipo_operativo: '0', descuento_prestamo: '0', fecha_pago: '' })
-const AUTO_INICIAL = (anio) => ({ semana: '', anio, seleccionados: [], viaticos_modo: 'empleado', viaticos_general: '0', fecha_pago: '' })
+// Semana actual según el calendario propio (viernes a jueves, numerada por el jueves de corte)
+const semActual = getSemana(0)
+const SEM_ACTUAL = getSemanaISO(semActual.fin)
+const ANIO_ACTUAL = new Date(semActual.fin + 'T12:00:00').getFullYear()
+
+const FORM_INICIAL = (anio) => ({ semana: String(SEM_ACTUAL), anio, prestamo_id: '', cuadrilla_id: '', empleado_id: '', dias_trabajados: '6', sueldo_diario: '', viaticos: '0', anticipo_operativo: '0', descuento_prestamo: '0', fecha_pago: '' })
+const AUTO_INICIAL = (anio) => ({ semana: String(SEM_ACTUAL), anio, seleccionados: [], viaticos_modo: 'empleado', viaticos_general: '0', fecha_pago: '' })
 
 export default function NominaPage() {
   const ig = useIG()
   const db = useDB()
   const hoy = new Date()
-  const [filtros, setFiltros] = useState({ semana: '', anio: hoy.getFullYear(), cuadrillas: [] })
+  const [filtros, setFiltros] = useState({ semana: String(SEM_ACTUAL), anio: ANIO_ACTUAL, cuadrillas: [] })
   const [modal, setModal] = useState(false)
   const [editModal, setEditModal] = useState(false)
   const [editRow, setEditRow] = useState(null)
   const [editForm, setEditForm] = useState({})
-  const [form, setForm] = useState(FORM_INICIAL(hoy.getFullYear()))
+  const [form, setForm] = useState(FORM_INICIAL(ANIO_ACTUAL))
   const [saving, setSaving] = useState(false)
   const [autoModal, setAutoModal] = useState(false)
-  const [autoForm, setAutoForm] = useState(AUTO_INICIAL(hoy.getFullYear()))
+  const [autoForm, setAutoForm] = useState(AUTO_INICIAL(ANIO_ACTUAL))
   const [autoSaving, setAutoSaving] = useState(false)
   const setF = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
   const setEF = k => e => setEditForm(f => ({ ...f, [k]: e.target.value }))
   const setFilt = k => e => setFiltros(f => ({ ...f, [k]: e.target.value }))
+
+  // ── Navegación de semana (viernes–jueves) ──
+  const semFiltroNum = parseInt(filtros.semana)
+  const semFiltroRango = semFiltroNum ? getSemana(getOffsetDesdeSemana(semFiltroNum)) : null
+  function moverSemana(delta) {
+    const base = semFiltroNum || SEM_ACTUAL
+    const off = getOffsetDesdeSemana(base) + delta
+    const s = getSemana(off)
+    setFiltros(f => ({ ...f, semana: String(getSemanaISO(s.fin)), anio: new Date(s.fin + 'T12:00:00').getFullYear() }))
+  }
+  function irSemanaActual() { setFiltros(f => ({ ...f, semana: String(SEM_ACTUAL), anio: ANIO_ACTUAL })) }
+
+  // ── Préstamo personal activo de un empleado (el más antiguo primero) ──
+  function prestamoActivoDe(empleadoId) {
+    return ig.prestamos
+      .filter(p => p.empleado_id === empleadoId && p.estado === 'Activo' && (p.tipo || 'Personal') === 'Personal')
+      .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))[0] || null
+  }
+  const descuentoSugerido = p => p ? Math.min(Number(p.saldo), Number(p.descuento_semanal) || Number(p.saldo)) : 0
 
   // ── Generación automática: la base es SIEMPRE la lista de empleados activos ──
   const normNombre = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
@@ -46,13 +71,14 @@ export default function NominaPage() {
     seleccionados: on ? [...new Set([...f.seleccionados, ...ids])] : f.seleccionados.filter(id => !ids.includes(id)),
   }))
   function openAuto() {
-    setAutoForm({ ...AUTO_INICIAL(hoy.getFullYear()), seleccionados: ig.empleados.map(e => e.id) })
+    setAutoForm({ ...AUTO_INICIAL(ANIO_ACTUAL), seleccionados: ig.empleados.map(e => e.id) })
     setAutoModal(true)
   }
   const porGenerar = [...new Set(autoForm.seleccionados)]
     .map(id => ig.empleados.find(e => e.id === id))
     .filter(e => e && !idsConNomina.has(e.id))
   const reembolsoAutoTotal = porGenerar.reduce((a, e) => a + ig.getReembolsosPendientes(e.id).reduce((x, i) => x + i.monto, 0), 0)
+  const descuentoAutoTotal = porGenerar.reduce((a, e) => a + descuentoSugerido(prestamoActivoDe(e.id)), 0)
 
   // ── Filtros y totales de la tabla ──
   const rows = ig.nomina.filter(r =>
@@ -90,7 +116,8 @@ export default function NominaPage() {
   function handleEmpChange(e) {
     const id = e.target.value
     const emp = ig.empleados.find(x => x.id === id)
-    setForm(f => ({ ...f, empleado_id: id, sueldo_diario: emp ? emp.sueldo_diario : '', cuadrilla_id: emp?.cuadrilla_id || f.cuadrilla_id }))
+    const p = prestamoActivoDe(id)
+    setForm(f => ({ ...f, empleado_id: id, sueldo_diario: emp ? emp.sueldo_diario : '', cuadrilla_id: emp?.cuadrilla_id || f.cuadrilla_id, prestamo_id: p?.id || '', descuento_prestamo: String(descuentoSugerido(p)) }))
   }
 
   function openEdit(r) {
@@ -110,6 +137,12 @@ export default function NominaPage() {
     setSaving(true)
     const { supabase } = await import('../lib/supabase')
     const nuevaSueldoSemana = Number(editRow.sueldo_diario) * parseFloat(editForm.dias_trabajados)
+    const nuevoDesc = parseFloat(editForm.descuento_prestamo) || 0
+    const delta = nuevoDesc - Number(editRow.descuento_prestamo || 0)
+    if (editRow.prestamo_id && delta !== 0) {
+      if (delta > 0) await ig.aplicarDescuento(editRow.prestamo_id, delta)
+      else await ig.revertirDescuento(editRow.prestamo_id, -delta)
+    }
     await supabase.from('nomina').update({
       dias_trabajados: parseFloat(editForm.dias_trabajados),
       sueldo_semana: nuevaSueldoSemana,
@@ -211,6 +244,8 @@ export default function NominaPage() {
     if (!form.semana || !form.empleado_id || !form.dias_trabajados) { alert('Completa los campos obligatorios.'); return }
     const existe = ig.nomina.find(r => r.empleado_id === form.empleado_id && r.semana == form.semana && r.anio == form.anio)
     if (existe) { alert('Ya existe un registro de nómina para este empleado en esta semana.'); return }
+    const descForm = parseFloat(form.descuento_prestamo) || 0
+    if (descForm > 0 && !form.prestamo_id) { alert('Este empleado no tiene préstamo activo al cual aplicar el descuento.'); return }
     setSaving(true)
     const { error, id } = await ig.addNomina({
       semana: parseInt(form.semana), anio: parseInt(form.anio),
@@ -221,17 +256,19 @@ export default function NominaPage() {
       sueldo_semana: sueldoSemana,
       viaticos: parseFloat(form.viaticos) || 0,
       anticipo_operativo: parseFloat(form.anticipo_operativo) || 0,
-      descuento_prestamo: parseFloat(form.descuento_prestamo) || 0,
+      descuento_prestamo: descForm,
+      prestamo_id: descForm > 0 ? (form.prestamo_id || null) : null,
       reembolso_gastos: reembolsoForm,
       notas: ig.notaReembolso(reembolsosForm),
       neto_pagar: neto,
       fecha_pago: form.fecha_pago || null,
     })
     if (!error && id && reembolsosForm.length) await ig.marcarReembolsados(reembolsosForm, id, form.fecha_pago || null)
+    if (!error && id && descForm > 0 && form.prestamo_id) await ig.aplicarDescuento(form.prestamo_id, descForm)
     setSaving(false)
     if (error) { alert('Error al guardar: ' + error.message); return }
     setModal(false)
-    setForm(FORM_INICIAL(hoy.getFullYear()))
+    setForm(FORM_INICIAL(ANIO_ACTUAL))
   }
 
   async function generarNominaAutomatica() {
@@ -241,11 +278,12 @@ export default function NominaPage() {
       alert(`No hay empleados por generar para la semana ${autoForm.semana}. ${omitidos ? `${omitidos} ya tienen nómina.` : 'Selecciona al menos uno.'}`)
       return
     }
-    if (!confirm(`Se crearán ${porGenerar.length} registros de nómina.${omitidos ? ` ${omitidos} omitidos (ya tienen nómina esta semana).` : ''}${reembolsoAutoTotal > 0 ? `\nIncluye ${ig.fmt$(reembolsoAutoTotal)} en reembolsos de dinero prestado.` : ''}\n\n¿Continuar?`)) return
+    if (!confirm(`Se crearán ${porGenerar.length} registros de nómina.${omitidos ? ` ${omitidos} omitidos (ya tienen nómina esta semana).` : ''}${reembolsoAutoTotal > 0 ? `\nIncluye ${ig.fmt$(reembolsoAutoTotal)} en reembolsos de dinero prestado.` : ''}${descuentoAutoTotal > 0 ? `\nSe descontarán ${ig.fmt$(descuentoAutoTotal)} de préstamos activos (los saldos se actualizan solos).` : ''}\n\n¿Continuar?`)) return
 
     setAutoSaving(true)
     const diasTrabajados = 6
     const reembolsosPorEmp = {}
+    const descuentosPorEmp = {}
     const filas = porGenerar.map(e => {
       const sd = Number(e.sueldo_diario)
       const ss = sd * diasTrabajados
@@ -255,16 +293,21 @@ export default function NominaPage() {
       const items = ig.getReembolsosPendientes(e.id)
       const reembolso = items.reduce((a, i) => a + i.monto, 0)
       if (items.length) reembolsosPorEmp[e.id] = items
+      const prest = prestamoActivoDe(e.id)
+      const desc = descuentoSugerido(prest)
+      if (prest && desc > 0) descuentosPorEmp[e.id] = { prestamo_id: prest.id, monto: desc }
       return {
         semana: autoSemana, anio: autoAnio,
         cuadrilla_id: e.cuadrilla_id || null,
         empleado_id: e.id,
         dias_trabajados: diasTrabajados,
         sueldo_diario: sd, sueldo_semana: ss, viaticos,
-        anticipo_operativo: 0, descuento_prestamo: 0,
+        anticipo_operativo: 0,
+        descuento_prestamo: desc,
+        prestamo_id: desc > 0 ? prest.id : null,
         reembolso_gastos: reembolso,
         notas: ig.notaReembolso(items),
-        neto_pagar: ss + viaticos + reembolso,
+        neto_pagar: ss + viaticos + reembolso - desc,
         fecha_pago: autoForm.fecha_pago || null,
       }
     })
@@ -273,6 +316,8 @@ export default function NominaPage() {
       for (const row of data) {
         const items = reembolsosPorEmp[row.empleado_id]
         if (items) await ig.marcarReembolsados(items, row.id, autoForm.fecha_pago || null)
+        const d = descuentosPorEmp[row.empleado_id]
+        if (d) await ig.aplicarDescuento(d.prestamo_id, d.monto)
       }
     }
     setAutoSaving(false)
@@ -293,16 +338,20 @@ export default function NominaPage() {
       </div>
 
       <div style={{ background: '#0F3460', color: '#fff', borderRadius: 10, padding: '8px 18px', fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
-        <span style={{ color: '#F5A623', fontSize: 22, fontWeight: 700 }}>
-          {Math.ceil((new Date() - new Date(new Date().getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000))}
-        </span>
-        <span>Semana actual del año · {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+        <span style={{ color: '#F5A623', fontSize: 22, fontWeight: 700 }}>{SEM_ACTUAL}</span>
+        <span>Semana actual (vie–jue) · {fmtSemanaLabel(semActual)} · hoy {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
       </div>
 
       <div className="card mb-4">
-        <div className="form-row c2" style={{ marginBottom: 12 }}>
-          <div><label className="label">Semana</label><input className="input" type="number" placeholder="Todas" value={filtros.semana} onChange={setFilt('semana')} /></div>
-          <div><label className="label">Año</label><input className="input" type="number" value={filtros.anio} onChange={setFilt('anio')} /></div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          <button type="button" className="btn btn-outline" onClick={() => moverSemana(-1)}>‹ Anterior</button>
+          <div style={{ width: 90 }}><label className="label">Semana</label><input className="input" type="number" min="1" max="53" placeholder="Todas" value={filtros.semana} onChange={setFilt('semana')} /></div>
+          <div style={{ width: 100 }}><label className="label">Año</label><input className="input" type="number" value={filtros.anio} onChange={setFilt('anio')} /></div>
+          <button type="button" className="btn btn-outline" onClick={() => moverSemana(1)}>Siguiente ›</button>
+          <button type="button" className={`btn ${semFiltroNum === SEM_ACTUAL ? 'btn-outline' : 'btn-gold'}`} onClick={irSemanaActual} disabled={semFiltroNum === SEM_ACTUAL}>Semana actual</button>
+          <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--tc-text-muted)' }}>
+            {semFiltroRango ? `Sem ${semFiltroNum}: ${fmtSemanaLabel(semFiltroRango)}` : 'Mostrando todas las semanas'}
+          </div>
         </div>
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -464,14 +513,14 @@ export default function NominaPage() {
             <div><label className="label">Anticipo operativo ($)</label><input className="input" type="number" min="0" step="100" value={form.anticipo_operativo} onChange={setF('anticipo_operativo')} /></div>
           </div>
           <div style={{ background: 'var(--tc-bg)', borderRadius: 8, padding: '10px 12px' }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--tc-text-muted)', marginBottom: 6 }}>Descuento de préstamo personal</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--tc-text-muted)', marginBottom: 6 }}>Descuento de préstamo personal <span style={{ fontWeight: 400 }}>— el saldo se actualiza solo al guardar</span></div>
             {form.empleado_id && ig.prestamos.filter(p => p.empleado_id === form.empleado_id && p.estado === 'Activo').length > 0 ? (
               ig.prestamos.filter(p => p.empleado_id === form.empleado_id && p.estado === 'Activo').map(p => (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 12 }}>Saldo: <strong style={{ color: '#A82020' }}>{ig.fmt$(p.saldo)}</strong></span>
                   <div style={{ flex: 1, minWidth: 140 }}>
-                    <label className="label">Descuento esta semana ($)</label>
-                    <input className="input" type="number" min="0" max={p.saldo} value={form.descuento_prestamo} onChange={setF('descuento_prestamo')} />
+                    <label className="label">Descuento esta semana ($) · sugerido {ig.fmt$(p.descuento_semanal)}</label>
+                    <input className="input" type="number" min="0" max={p.saldo} value={form.prestamo_id === p.id ? form.descuento_prestamo : '0'} disabled={form.prestamo_id !== p.id} onChange={setF('descuento_prestamo')} />
                   </div>
                   <span style={{ fontSize: 12 }}>Saldo después: <strong style={{ color: '#946200' }}>{ig.fmt$(Math.max(0, Number(p.saldo) - (parseFloat(form.descuento_prestamo) || 0)))}</strong></span>
                 </div>
@@ -517,6 +566,7 @@ export default function NominaPage() {
             <div style={{ background: 'var(--tc-bg)', borderRadius: 8, padding: '10px 12px', fontSize: 13 }}>
               <div style={{ fontWeight: 500, color: 'var(--tc-text)' }}>{ig.getEmpleado(editRow.empleado_id).nombre}</div>
               <div style={{ fontSize: 12, color: 'var(--tc-text-muted)' }}>Sem {editRow.semana} · S.Diario: {ig.fmt$(editRow.sueldo_diario)}</div>
+              {editRow.prestamo_id && <div style={{ fontSize: 12, color: '#A82020', marginTop: 4 }}>Al cambiar el descuento se ajusta el saldo del préstamo automáticamente.</div>}
               {editRow.reembolso_gastos > 0 && <div style={{ fontSize: 12, color: '#946200', marginTop: 4 }}>Reembolso incluido: <strong>+{ig.fmt$(editRow.reembolso_gastos)}</strong> (fijo; para cambiarlo elimina el registro y vuelve a generarlo)</div>}
             </div>
             <div className="form-row c2">
@@ -548,7 +598,7 @@ export default function NominaPage() {
       <Modal open={autoModal} onClose={() => setAutoModal(false)} title="Generar nómina automática">
         <div className="space-y-3">
           <div style={{ background: '#E8F0FB', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#1A4FA0' }}>
-            Base: lista de empleados activos. Se generan 6 días por persona seleccionada. Quien ya tenga nómina en esa semana aparece deshabilitado. Los reembolsos de dinero prestado se agregan automáticamente.
+            Base: lista de empleados activos. Se generan 6 días por persona seleccionada. Quien ya tenga nómina en esa semana aparece deshabilitado. Los reembolsos de dinero prestado y los descuentos de préstamos activos se aplican automáticamente.
           </div>
           <div className="form-row c3">
             <div><label className="label">Semana # *</label>
@@ -590,6 +640,7 @@ export default function NominaPage() {
                       const yaTiene = idsConNomina.has(e.id)
                       const repetido = nombresRepetidos.has(normNombre(e.nombre))
                       const reemb = ig.getReembolsosPendientes(e.id).reduce((a, i) => a + i.monto, 0)
+                      const desc = descuentoSugerido(prestamoActivoDe(e.id))
                       return (
                         <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px 5px 24px', fontSize: 13, cursor: yaTiene ? 'default' : 'pointer', color: yaTiene ? 'var(--tc-text-muted)' : 'var(--tc-text)', background: repetido && !yaTiene ? 'rgba(245,166,35,0.12)' : 'transparent', borderBottom: '1px solid var(--tc-border)' }}>
                           <input type="checkbox" style={{ width: 'auto' }} disabled={yaTiene}
@@ -599,6 +650,7 @@ export default function NominaPage() {
                           <span style={{ flex: 1 }}>{e.nombre}</span>
                           <span style={{ fontSize: 11, color: 'var(--tc-text-muted)' }}>{ig.fmt$(e.sueldo_diario)}/día</span>
                           {reemb > 0 && !yaTiene && <span className="badge badge-amber" style={{ fontSize: 10 }}>+{ig.fmt$(reemb)} reembolso</span>}
+                          {desc > 0 && !yaTiene && <span className="badge badge-red" style={{ fontSize: 10 }}>-{ig.fmt$(desc)} préstamo</span>}
                           {yaTiene && <span className="badge badge-green" style={{ fontSize: 10 }}>Ya tiene nómina</span>}
                           {repetido && !yaTiene && <span className="badge badge-amber" style={{ fontSize: 10 }}>Nombre repetido</span>}
                         </label>
@@ -627,6 +679,7 @@ export default function NominaPage() {
           <div style={{ background: 'var(--tc-bg)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: 'var(--tc-text-muted)' }}>
             Se generarán: <strong style={{ color: 'var(--tc-text)' }}>{porGenerar.length}</strong> registros
             {reembolsoAutoTotal > 0 && <> · <span style={{ color: '#946200' }}>incluye {ig.fmt$(reembolsoAutoTotal)} en reembolsos</span></>}
+            {descuentoAutoTotal > 0 && <> · <span style={{ color: '#A82020' }}>descuenta {ig.fmt$(descuentoAutoTotal)} de préstamos</span></>}
             {autoForm.semana && idsConNomina.size > 0 && <> · <span style={{ color: '#1A7A45' }}>{idsConNomina.size} ya tienen nómina en la semana {autoForm.semana}</span></>}
           </div>
           <div className="flex justify-end gap-2 pt-1">

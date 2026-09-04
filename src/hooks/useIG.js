@@ -117,8 +117,10 @@ export function useIG() {
     if (!error) await load()
     return { error, data: data || [] }
   }
-  async function deleteNomina(id) {
+    async function deleteNomina(id) {
+    const row = nomina.find(n => n.id === id)
     await revertirReembolsos(id)
+    if (row?.prestamo_id && Number(row.descuento_prestamo) > 0) await revertirDescuento(row.prestamo_id, row.descuento_prestamo)
     const { error } = await supabase.from('nomina').delete().eq('id', id)
     if (!error) load()
     return { error }
@@ -159,12 +161,24 @@ export function useIG() {
     if (!error) load()
     return { error }
   }
-  async function aplicarDescuento(prestamoId, descuento) {
-    const prestamo = prestamos.find(p => p.id === prestamoId)
-    if (!prestamo) return { error: 'No encontrado' }
+    async function aplicarDescuento(prestamoId, descuento) {
+    // Lee el préstamo directo de la base (no del estado) para no usar un saldo desactualizado
+    const { data: prestamo, error: e0 } = await supabase.from('prestamos').select('*').eq('id', prestamoId).single()
+    if (e0 || !prestamo) return { error: e0 || 'No encontrado' }
     const nuevoSaldo = Math.max(0, Number(prestamo.saldo) - Number(descuento))
     const nuevoPagado = Number(prestamo.monto_pagado) + Number(descuento)
     const nuevoEstado = nuevoSaldo === 0 ? 'Liquidado' : 'Activo'
+    const { error } = await supabase.from('prestamos').update({ saldo: nuevoSaldo, monto_pagado: nuevoPagado, estado: nuevoEstado }).eq('id', prestamoId)
+    if (!error) load()
+    return { error }
+  }
+  async function revertirDescuento(prestamoId, descuento) {
+    if (!prestamoId || !descuento) return { error: null }
+    const { data: prestamo, error: e0 } = await supabase.from('prestamos').select('*').eq('id', prestamoId).single()
+    if (e0 || !prestamo) return { error: e0 || 'No encontrado' }
+    const nuevoSaldo = Number(prestamo.saldo) + Number(descuento)
+    const nuevoPagado = Math.max(0, Number(prestamo.monto_pagado) - Number(descuento))
+    const nuevoEstado = prestamo.estado === 'Cancelado' ? 'Cancelado' : (nuevoSaldo > 0 ? 'Activo' : 'Liquidado')
     const { error } = await supabase.from('prestamos').update({ saldo: nuevoSaldo, monto_pagado: nuevoPagado, estado: nuevoEstado }).eq('id', prestamoId)
     if (!error) load()
     return { error }
@@ -238,7 +252,7 @@ async function updateCierreDistribucion(id, distribucion) {
     addGasto, deleteGasto,
     addNomina, addNominaLote, deleteNomina,
     getReembolsosPendientes, notaReembolso, marcarReembolsados, revertirReembolsos,
-    addPrestamo, aplicarDescuento,
+    addPrestamo, aplicarDescuento, revertirDescuento,
     addCierre, updateCierreEstado,
      addDispersion, getDepositos, deleteDispersion,
     socios, addSocio, updateSocio, deleteSocio,
