@@ -105,21 +105,53 @@ export function useIG() {
     if (!error) load()
     return { error }
   }
+    // ── Nómina ──
   async function addNomina(data) {
-    const { error } = await supabase.from('nomina').insert({ ...data, user_id: user.id })
+    const { data: row, error } = await supabase.from('nomina').insert({ ...data, user_id: user.id }).select().single()
     if (!error) load()
-    return { error }
+    return { error, id: row?.id }
   }
-    async function addNominaLote(rows) {
-    if (!rows.length) return { error: null }
-    const { error } = await supabase.from('nomina').insert(rows.map(r => ({ ...r, user_id: user.id })))
+  async function addNominaLote(rows) {
+    if (!rows.length) return { error: null, data: [] }
+    const { data, error } = await supabase.from('nomina').insert(rows.map(r => ({ ...r, user_id: user.id }))).select()
     if (!error) await load()
-    return { error }
+    return { error, data: data || [] }
   }
   async function deleteNomina(id) {
+    await revertirReembolsos(id)
     const { error } = await supabase.from('nomina').delete().eq('id', id)
     if (!error) load()
     return { error }
+  }
+
+  // ── Reembolsos: dinero prestado por un empleado/socio (gastos y préstamos) ──
+  function getReembolsosPendientes(empleadoId) {
+    if (!empleadoId) return []
+    const g = gastos
+      .filter(x => x.prestado_por === 'empleado' && x.prestado_por_empleado_id === empleadoId && !x.reembolsado)
+      .map(x => ({ tipo: 'gasto', id: x.id, fecha: x.fecha, monto: Number(x.monto), descripcion: `${x.categoria}: ${x.concepto}` }))
+    const p = prestamos
+      .filter(x => x.prestado_por === 'empleado' && x.prestado_por_empleado_id === empleadoId && !x.reembolsado)
+      .map(x => ({ tipo: 'prestamo', id: x.id, fecha: x.fecha, monto: Number(x.monto_original), descripcion: `Préstamo a ${getEmpleado(x.empleado_id).nombre}` }))
+    return [...g, ...p].sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))
+  }
+  function notaReembolso(items) {
+    if (!items.length) return null
+    const f = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' }) : ''
+    return 'Reembolso: ' + items.map(i => `${i.descripcion} ${f(i.fecha)} ${fmt$(i.monto)}`).join(' · ')
+  }
+  async function marcarReembolsados(items, nominaId, fecha) {
+    const upd = { reembolsado: true, reembolso_nomina_id: nominaId, reembolso_fecha: fecha || new Date().toISOString().split('T')[0] }
+    const gIds = items.filter(i => i.tipo === 'gasto').map(i => i.id)
+    const pIds = items.filter(i => i.tipo === 'prestamo').map(i => i.id)
+    if (gIds.length) await supabase.from('gastos').update(upd).in('id', gIds)
+    if (pIds.length) await supabase.from('prestamos').update(upd).in('id', pIds)
+    load()
+  }
+  async function revertirReembolsos(nominaId) {
+    const upd = { reembolsado: false, reembolso_nomina_id: null, reembolso_fecha: null }
+    await supabase.from('gastos').update(upd).eq('reembolso_nomina_id', nominaId)
+    await supabase.from('prestamos').update(upd).eq('reembolso_nomina_id', nominaId)
   }
   async function addPrestamo(data) {
     const saldo = data.monto_original
@@ -205,6 +237,7 @@ async function updateCierreDistribucion(id, distribucion) {
     addIngreso, deleteIngreso,
     addGasto, deleteGasto,
     addNomina, addNominaLote, deleteNomina,
+    getReembolsosPendientes, notaReembolso, marcarReembolsados, revertirReembolsos,
     addPrestamo, aplicarDescuento,
     addCierre, updateCierreEstado,
      addDispersion, getDepositos, deleteDispersion,
