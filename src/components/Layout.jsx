@@ -9,6 +9,7 @@ const navItems = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/rendimiento', label: 'Rendimiento' },
   { to: '/produccion', label: 'Producción semanal' },
+  { to: '/odns', label: 'ODNs y avance' },
   { to: '/cn', label: 'Casos de Negocio (CN)' },
   { section: 'Cortes' },
   { to: '/corte-semanal', label: 'Corte semanal' },

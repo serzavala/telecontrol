@@ -23,6 +23,7 @@ import CierresSemanales from './pages/CierresSemanales'
 import Empleados from './pages/Empleados'
 import Dispersion from './pages/Dispersion'
 import Esquema from './pages/Esquema'
+import Odns from './pages/Odns'
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'#6B7A99',fontSize:14 }}>Cargando...</div>
@@ -56,6 +57,7 @@ function AppRoutes() {
         <Route path="empleados" element={<Empleados />} />
         <Route path="dispersion" element={<Dispersion />} />
         <Route path="esquema" element={<Esquema />} />
+        <Route path="odns" element={<Odns />} />
       </Route>
     </Routes>
   )
