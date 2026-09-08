@@ -2,6 +2,11 @@ import { useState } from 'react'
 import { useODN, CONCEPTO_DROP, CONCEPTO_NAP, CONCEPTO_POTENCIA } from '../hooks/useODN'
 import { useDB } from '../hooks/useDB'
 import Modal from '../components/Modal'
+import { getSemana, getSemanaISO, getOffsetDesdeSemana, fmtSemanaLabel } from '../lib/fechas'
+
+const semActual = getSemana(0)
+const SEM_ACTUAL = getSemanaISO(semActual.fin)
+const ANIO_ACTUAL = new Date(semActual.fin + 'T12:00:00').getFullYear()
 
 const hoyStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const ETAPA_COLOR = { 'Construcción': '#0F3460', 'Fusiones': '#946200', 'Potencias': '#1A7A45', 'Otros': '#6B7A99' }
@@ -20,6 +25,18 @@ export default function Odns() {
   const odn = useODN()
   const db = useDB()
   const [filtros, setFiltros] = useState({ rama: '', estado: '', q: '' })
+  const [sem, setSem] = useState({ semana: SEM_ACTUAL, anio: ANIO_ACTUAL })
+  const semRango = getSemana(getOffsetDesdeSemana(sem.semana))
+  const moverSem = (d) => { const s = getSemana(getOffsetDesdeSemana(sem.semana) + d); setSem({ semana: getSemanaISO(s.fin), anio: new Date(s.fin + 'T12:00:00').getFullYear() }) }
+  const rs = odn.resumenSemana(sem.semana, sem.anio)
+  const enRama = (a) => !filtros.rama || odn.getODN(a.odn_id).rama === filtros.rama
+  const semReal = rs.avances.filter(enRama).reduce((x, a) => x + Number(a.total), 0)
+  const semCobros = rs.cobros.filter(enRama).reduce((x, c) => x + Number(c.importe), 0)
+  const semPorAvance = rs.avancesPorAvance.filter(enRama).reduce((x, a) => x + Number(a.total), 0)
+  const semDrop = rs.avances.filter(enRama).filter(a => a.concepto_id === CONCEPTO_DROP).reduce((x, a) => x + Number(a.cantidad), 0)
+  const semNaps = rs.avances.filter(enRama).filter(a => a.concepto_id === CONCEPTO_NAP).reduce((x, a) => x + Number(a.cantidad), 0)
+  const semPot = rs.avances.filter(enRama).filter(a => a.concepto_id === CONCEPTO_POTENCIA).reduce((x, a) => x + Number(a.cantidad), 0)
+  const semFus = rs.avances.filter(enRama).filter(a => odn.getConcepto(a.concepto_id).etapa === 'Fusiones').reduce((x, a) => x + Number(a.cantidad), 0)
   const [avanceModal, setAvanceModal] = useState(null)     // odn seleccionada
   const [detalle, setDetalle] = useState(null)
   const [nuevoModal, setNuevoModal] = useState(false)
@@ -115,11 +132,24 @@ export default function Odns() {
         </div>
       </div>
 
+      {/* ── Semana ── */}
+      <div className="card mb-4" style={{ padding: '10px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => moverSem(-1)}>‹</button>
+          <div style={{ fontWeight: 500 }}>Semana {sem.semana} <span style={{ fontWeight: 400, color: 'var(--tc-text-muted)', fontSize: 12 }}>· {fmtSemanaLabel(semRango)}</span></div>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => moverSem(1)}>›</button>
+          {sem.semana !== SEM_ACTUAL && <button type="button" className="btn btn-gold btn-sm" onClick={() => setSem({ semana: SEM_ACTUAL, anio: ANIO_ACTUAL })}>Semana actual</button>}
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--tc-text-muted)' }}>
+            {semDrop.toLocaleString('es-MX')} m drop · {semNaps} NAPs · {semFus} fusiones · {semPot} potencias{filtros.rama ? ` · rama ${filtros.rama}` : ''}
+          </span>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <div className="metric metric-light"><div className="metric-label">Elementos</div><div className="metric-value" style={{ color: 'var(--tc-text)' }}>{lista.length}</div><div className="metric-sub">{lista.filter(x => x.r.estado === 'Cobrada').length} cobradas · {lista.filter(x => x.r.estado === 'En proceso' || x.r.estado === 'Parcial').length} en proceso</div></div>
-        <div className="metric metric-light"><div className="metric-label">Valor total del alcance</div><div className="metric-value" style={{ color: 'var(--tc-text)' }}>{odn.fmt$(tot.valor)}</div></div>
-        <div className="metric metric-gold"><div className="metric-label">Avanzado (real)</div><div className="metric-value">{odn.fmt$(tot.avanzado)}</div><div className="metric-sub">{tot.valor ? pct(tot.avanzado / tot.valor * 100) : '—'} del alcance</div></div>
-        <div className="metric metric-primary"><div className="metric-label">Pasado a cobro</div><div className="metric-value">{odn.fmt$(tot.cobrado)}</div><div className="metric-sub">Avanzado sin cobrar: {odn.fmt$(Math.max(0, tot.avanzado - tot.cobrado))}</div></div>
+        <div className="metric metric-gold"><div className="metric-label">Producido esta semana (real)</div><div className="metric-value">{odn.fmt$(semReal)}</div><div className="metric-sub">Todo lo avanzado, se cobre o no</div></div>
+        <div className="metric metric-primary"><div className="metric-label">A cobro esta semana</div><div className="metric-value">{odn.fmt$(semCobros + semPorAvance)}</div><div className="metric-sub">{odn.fmt$(semCobros)} etapas cerradas · {odn.fmt$(semPorAvance)} por avance</div></div>
+        <div className="metric metric-light"><div className="metric-label">Avanzado sin pasar a cobro</div><div className="metric-value" style={{ color: '#946200' }}>{odn.fmt$(Math.max(0, tot.avanzado - tot.cobrado))}</div><div className="metric-sub">Acumulado en ODNs sin cerrar</div></div>
+        <div className="metric metric-light"><div className="metric-label">Alcance total</div><div className="metric-value" style={{ color: 'var(--tc-text)' }}>{odn.fmt$(tot.valor)}</div><div className="metric-sub">{lista.length} elementos · {tot.valor ? pct(tot.avanzado / tot.valor * 100) : '—'} avanzado · {odn.fmt$(tot.cobrado)} a cobro acumulado</div></div>
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -146,7 +176,7 @@ export default function Odns() {
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
                       <span style={{ color: e.cobro ? '#1A7A45' : e.terminada ? '#946200' : 'var(--tc-text-muted)' }}>
-                        {e.cobro ? `✓ Cobro sem ${e.cobro.semana}${e.cobro.tipo === 'Parcial' ? ' (parcial)' : ''}` : e.terminada ? 'Terminada' : pct(e.pct)}
+                        {e.cobro ? `✓ A cobro sem ${e.cobro.semana}${e.cobro.tipo === 'Parcial' ? ' (parcial)' : ''}` : e.terminada ? 'Terminada' : pct(e.pct)}
                       </span>
                       <span style={{ color: 'var(--tc-text-muted)' }}>{odn.fmt$(e.importeAlcance)}</span>
                     </div>
@@ -166,7 +196,7 @@ export default function Odns() {
                   <td className="td">{celda('Construcción')}</td>
                   <td className="td">{celda('Fusiones')}</td>
                   <td className="td">{celda('Potencias')}</td>
-                  <td className="td" style={{ textAlign: 'right' }}><div style={{ fontWeight: 500 }}>{odn.fmt$(r.valorTotal)}</div><div style={{ fontSize: 10, color: '#1A7A45' }}>cobrado {odn.fmt$(r.valorCobrado)}</div></td>
+                  <td className="td" style={{ textAlign: 'right' }}><div style={{ fontWeight: 500 }}>{odn.fmt$(r.valorTotal)}</div><div style={{ fontSize: 10, color: '#1A7A45' }}>a cobro {odn.fmt$(r.valorCobrado)}</div></td>
                   <td className="td"><span className={`badge ${ESTADO_BADGE[r.estado]}`}>{r.estado}</span></td>
                   <td className="td">
                     <div style={{ display: 'flex', gap: 4 }}>
@@ -303,7 +333,7 @@ export default function Odns() {
                     <div style={{ fontSize: 11, color: ETAPA_COLOR[e.etapa], fontWeight: 500 }}>{e.etapa}</div>
                     <div style={{ fontSize: 15, fontWeight: 500 }}>{pct(e.pct)}</div>
                     <div style={{ fontSize: 11, color: 'var(--tc-text-muted)' }}>{odn.fmt$(e.importeAvanzado)} / {odn.fmt$(e.importeAlcance)}</div>
-                    {e.cobro && <div style={{ fontSize: 11, color: '#1A7A45', marginTop: 2 }}>✓ Cobro sem {e.cobro.semana}/{e.cobro.anio} · {odn.fmt$(e.cobro.importe)}{e.cobro.tipo === 'Parcial' ? ` (parcial: ${e.cobro.motivo || 's/motivo'})` : ''}</div>}
+                    {e.cobro && <div style={{ fontSize: 11, color: '#1A7A45', marginTop: 2 }}>✓ A cobro sem {e.cobro.semana}/{e.cobro.anio} · {odn.fmt$(e.cobro.importe)}{e.cobro.tipo === 'Parcial' ? ` (parcial: ${e.cobro.motivo || 's/motivo'})` : ''}</div>}
                     {e.items.map(i => <div key={i.concepto.id} style={{ fontSize: 10, color: 'var(--tc-text-muted)' }}>{i.concepto.nombre}: {i.avanzado.toLocaleString('es-MX')}/{i.alcance.toLocaleString('es-MX')} {i.concepto.unidad}</div>)}
                   </div>
                 ))}
