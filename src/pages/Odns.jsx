@@ -24,7 +24,7 @@ export default function Odns() {
   const [detalle, setDetalle] = useState(null)
   const [nuevoModal, setNuevoModal] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [av, setAv] = useState({ modo: 'construccion', nap_ids: [], concepto_id: '', cantidad: '', porcentaje: '', cuadrilla_id: '', fecha: hoyStr(), notas: '', motivo: '' })
+  const [av, setAv] = useState({ modo: 'drop', nap_ids: [], concepto_id: '', cantidad: '', porcentaje: '', cuadrilla_id: '', fecha: hoyStr(), notas: '', motivo: '' })
   const [nuevo, setNuevo] = useState({ rama: '', tipo: 'ODN', nombre: '', proyecto_id: '', naps: '', alcances: {} })
   const setA = k => e => setAv(f => ({ ...f, [k]: e.target.value }))
   const setN = k => e => setNuevo(f => ({ ...f, [k]: e.target.value }))
@@ -40,7 +40,7 @@ export default function Odns() {
 
   function openAvance(o) {
     const r = odn.resumenODN(o.id)
-    const modo = r.naps.length ? (r.napsConstruidas < r.naps.length ? 'construccion' : 'potencias') : 'concepto'
+    const modo = r.naps.length ? (r.napsDrop < r.naps.length ? 'drop' : r.napsInstaladas < r.naps.length ? 'naps' : 'potencias') : 'concepto'
     setAv({ modo, nap_ids: [], concepto_id: '', cantidad: '', porcentaje: '', cuadrilla_id: '', fecha: hoyStr(), notas: '', motivo: '' })
     setAvanceModal(o)
   }
@@ -49,7 +49,8 @@ export default function Odns() {
     if (!av.fecha) { alert('Indica la fecha.'); return }
     setSaving(true)
     let res
-    if (av.modo === 'construccion') res = await odn.registrarConstruccion({ odn_id: avanceModal.id, nap_ids: av.nap_ids, cuadrilla_id: av.cuadrilla_id, fecha: av.fecha, notas: av.notas })
+    if (av.modo === 'drop') res = await odn.registrarDrop({ odn_id: avanceModal.id, nap_ids: av.nap_ids, cuadrilla_id: av.cuadrilla_id, fecha: av.fecha, notas: av.notas })
+    else if (av.modo === 'naps') res = await odn.registrarNaps({ odn_id: avanceModal.id, nap_ids: av.nap_ids, cuadrilla_id: av.cuadrilla_id, fecha: av.fecha, notas: av.notas })
     else if (av.modo === 'potencias') res = await odn.registrarMedicion({ odn_id: avanceModal.id, nap_ids: av.nap_ids, cuadrilla_id: av.cuadrilla_id, fecha: av.fecha, notas: av.notas })
     else res = await odn.registrarAvance({ odn_id: avanceModal.id, concepto_id: av.concepto_id, cuadrilla_id: av.cuadrilla_id, fecha: av.fecha, cantidad: av.cantidad, porcentaje: av.porcentaje !== '' ? av.porcentaje : null, notas: av.notas })
     setSaving(false)
@@ -156,7 +157,11 @@ export default function Odns() {
               return (
                 <tr key={o.id}>
                   <td className="td"><div style={{ fontWeight: 500 }}>{o.nombre}</div><div style={{ fontSize: 11, color: 'var(--tc-text-muted)' }}>Rama {o.rama} · {o.tipo}{o.colonia ? ` · ${o.colonia}` : ''}</div></td>
-                  <td className="td" style={{ textAlign: 'center', fontSize: 12 }}>{r.naps.length ? `${r.napsConstruidas}/${r.naps.length}` : '—'}{r.naps.length > 0 && <div style={{ fontSize: 10, color: 'var(--tc-text-muted)' }}>{r.napsMedidas} medidas</div>}</td>
+                  <td className="td" style={{ textAlign: 'center', fontSize: 11 }}>{r.naps.length ? <>
+                    <div>drop <strong>{r.napsDrop}</strong>/{r.naps.length}</div>
+                    <div>nap <strong>{r.napsInstaladas}</strong>/{r.naps.length}</div>
+                    <div style={{ color: 'var(--tc-text-muted)' }}>med {r.napsMedidas}/{r.naps.length}</div>
+                  </> : '—'}</td>
                   <td className="td" style={{ textAlign: 'right', fontSize: 12 }}>{r.naps.length ? r.mlTotal.toLocaleString('es-MX') : '—'}</td>
                   <td className="td">{celda('Construcción')}</td>
                   <td className="td">{celda('Fusiones')}</td>
@@ -180,7 +185,8 @@ export default function Odns() {
       <Modal open={!!avanceModal} onClose={() => setAvanceModal(null)} title={avanceModal ? `Registrar avance — ${avanceModal.nombre} (Rama ${avanceModal.rama})` : ''}>
         {avanceModal && (() => {
           const r = odn.resumenODN(avanceModal.id)
-          const pendConstr = r.naps.filter(n => !n.construida)
+          const pendDrop = r.naps.filter(n => !n.drop_tendido)
+          const pendNap = r.naps.filter(n => !n.nap_instalada)
           const pendMed = r.naps.filter(n => !n.medida)
           const potEtapa = r.etapas.find(e => e.etapa === 'Potencias')
           const general = odn.esGeneral(avanceModal.id)
@@ -191,14 +197,15 @@ export default function Odns() {
             .map(c => odn.resumenConcepto(avanceModal.id, c.id))
           const cSel = conceptosDisp.find(x => x.concepto.id === av.concepto_id)
           const toggle = (id, on) => setAv(f => ({ ...f, nap_ids: on ? [...new Set([...f.nap_ids, id])] : f.nap_ids.filter(x => x !== id) }))
-          const listaNaps = av.modo === 'construccion' ? pendConstr : pendMed
+          const listaNaps = av.modo === 'drop' ? pendDrop : av.modo === 'naps' ? pendNap : pendMed
           const mlSel = listaNaps.filter(n => av.nap_ids.includes(n.id)).reduce((s, n) => s + Number(n.metros_lineales), 0)
           return (
             <div className="space-y-3">
               <div className="form-row c3">
                 <div><label className="label">Tipo de avance</label>
                   <select className="input" value={av.modo} onChange={e => setAv(f => ({ ...f, modo: e.target.value, nap_ids: [], concepto_id: '' }))}>
-                    {r.naps.length > 0 && <option value="construccion">Construcción (drop + NAPs)</option>}
+                    {r.naps.length > 0 && <option value="drop">Drop tendido (metros por NAP)</option>}
+                    {r.naps.length > 0 && <option value="naps">NAP instalado (piezas)</option>}
                     {r.naps.length > 0 && <option value="potencias">Potencias (NAPs medidos)</option>}
                     {conceptosDisp.length > 0 && <option value="concepto">Fusiones / tendido / otro</option>}
                   </select>
@@ -212,10 +219,10 @@ export default function Odns() {
                 <div><label className="label">Fecha *</label><input className="input" type="date" value={av.fecha} onChange={setA('fecha')} /></div>
               </div>
 
-              {(av.modo === 'construccion' || av.modo === 'potencias') && (
+              {(av.modo === 'drop' || av.modo === 'naps' || av.modo === 'potencias') && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <label className="label" style={{ marginBottom: 0 }}>{av.modo === 'construccion' ? 'NAPs construidos hoy' : 'NAPs medidos hoy'} · {listaNaps.length} pendientes</label>
+                    <label className="label" style={{ marginBottom: 0 }}>{av.modo === 'drop' ? 'NAPs con drop tendido hoy' : av.modo === 'naps' ? 'NAPs instalados hoy' : 'NAPs medidos hoy'} · {listaNaps.length} pendientes</label>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button type="button" className="btn btn-outline btn-sm" onClick={() => setAv(f => ({ ...f, nap_ids: listaNaps.map(n => n.id) }))}>Todos</button>
                       <button type="button" className="btn btn-outline btn-sm" onClick={() => setAv(f => ({ ...f, nap_ids: [] }))}>Ninguno</button>
@@ -231,10 +238,14 @@ export default function Odns() {
                         </label>
                       ))}
                     </div>
-                  ) : <div style={{ fontSize: 12, color: '#1A7A45', padding: '8px 0' }}>✓ Todos los NAPs ya están {av.modo === 'construccion' ? 'construidos' : 'medidos'}.</div>}
+                  ) : <div style={{ fontSize: 12, color: '#1A7A45', padding: '8px 0' }}>✓ Todos los NAPs ya tienen {av.modo === 'drop' ? 'drop tendido' : av.modo === 'naps' ? 'NAP instalado' : 'medición'}.</div>}
                   <div style={{ fontSize: 12, color: 'var(--tc-text-muted)', marginTop: 6 }}>
-                    Seleccionados: <strong style={{ color: 'var(--tc-text)' }}>{av.nap_ids.length}</strong> NAPs{av.modo === 'construccion' && <> · <strong style={{ color: 'var(--tc-text)' }}>{mlSel.toLocaleString('es-MX')}</strong> m lineales</>}
-                    {av.nap_ids.length > 0 && av.nap_ids.length === listaNaps.length && <span style={{ color: '#946200', marginLeft: 8 }}>→ con esto se cierra la etapa y pasa a cobro</span>}
+                    Seleccionados: <strong style={{ color: 'var(--tc-text)' }}>{av.nap_ids.length}</strong> NAPs{av.modo === 'drop' && <> · <strong style={{ color: 'var(--tc-text)' }}>{mlSel.toLocaleString('es-MX')}</strong> m lineales</>}
+                    {av.nap_ids.length > 0 && av.nap_ids.length === listaNaps.length && (
+                      (av.modo === 'drop' && pendNap.length === 0) || (av.modo === 'naps' && pendDrop.length === 0) || av.modo === 'potencias'
+                        ? <span style={{ color: '#946200', marginLeft: 8 }}>→ con esto se cierra la etapa y pasa a cobro</span>
+                        : <span style={{ color: 'var(--tc-text-muted)', marginLeft: 8 }}>→ {av.modo === 'drop' ? 'drop completo; faltan NAPs por instalar' : 'NAPs completos; falta drop por tender'} para cerrar</span>
+                    )}
                   </div>
                 </div>
               )}
@@ -299,12 +310,16 @@ export default function Odns() {
               </div>
               {r.naps.length > 0 && (
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--tc-text-muted)', marginBottom: 4 }}>NAPs ({r.napsConstruidas}/{r.naps.length} construidos · {r.napsMedidas} medidos · {r.mlTotal.toLocaleString('es-MX')} m)</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--tc-text-muted)', marginBottom: 4 }}>NAPs — drop {r.napsDrop}/{r.naps.length} · instalados {r.napsInstaladas}/{r.naps.length} · medidos {r.napsMedidas}/{r.naps.length} · {r.mlTotal.toLocaleString('es-MX')} m</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
                     {r.naps.map(n => (
                       <div key={n.id} style={{ fontSize: 11, padding: '4px 6px', borderRadius: 6, background: n.medida ? 'rgba(26,122,69,0.12)' : n.construida ? 'rgba(15,52,96,0.08)' : 'var(--tc-bg)', border: '1px solid var(--tc-border)' }}>
                         <span style={{ fontWeight: 500 }}>{n.nombre}</span> <span style={{ color: 'var(--tc-text-muted)' }}>{Number(n.metros_lineales)} m</span>
-                        <div style={{ fontSize: 10, color: n.medida ? '#1A7A45' : n.construida ? '#0F3460' : '#A0AABB' }}>{n.medida ? '✓ medido' : n.construida ? '✓ construido' : 'pendiente'}</div>
+                        <div style={{ fontSize: 10, display: 'flex', gap: 5 }}>
+                          <span style={{ color: n.drop_tendido ? '#0F3460' : '#A0AABB' }}>{n.drop_tendido ? '✓' : '○'} drop</span>
+                          <span style={{ color: n.nap_instalada ? '#0F3460' : '#A0AABB' }}>{n.nap_instalada ? '✓' : '○'} nap</span>
+                          <span style={{ color: n.medida ? '#1A7A45' : '#A0AABB' }}>{n.medida ? '✓' : '○'} med</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -316,7 +331,7 @@ export default function Odns() {
                   <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--tc-border)' }}>
                     <span>{a.fecha} · sem {a.semana} · {odn.getConcepto(a.concepto_id).nombre} · <strong>{Number(a.cantidad).toLocaleString('es-MX')}</strong> {odn.getConcepto(a.concepto_id).unidad}{a.cuadrilla_id ? ` · ${db.getCuadrilla(a.cuadrilla_id).nombre}` : ''}{a.notas ? ` · ${a.notas}` : ''}</span>
                     <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ color: '#1A7A45' }}>{odn.fmt$(a.total)}</span>
-                      {a.concepto_id !== CONCEPTO_NAP && <button className="btn btn-outline btn-sm" style={{ color: '#A82020' }} onClick={async () => { if (confirm('¿Eliminar este avance? Se revertirán los NAPs y el cobro si aplica.')) { const res = await odn.eliminarAvance(a.id); if (res.error) alert(res.error.message) } }}>✕</button>}
+                      {<button className="btn btn-outline btn-sm" style={{ color: '#A82020' }} onClick={async () => { if (confirm('¿Eliminar este avance? Se revertirán los NAPs y el cobro si aplica.')) { const res = await odn.eliminarAvance(a.id); if (res.error) alert(res.error.message) } }}>✕</button>}
                     </span>
                   </div>
                 )) : <div style={{ fontSize: 12, color: '#A0AABB' }}>Sin avances registrados (la carga inicial no genera avances).</div>}

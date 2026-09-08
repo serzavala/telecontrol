@@ -70,8 +70,8 @@ export function useODN() {
     const alcance = alc ? num(alc.cantidad) : 0
     const ns = napsDe(odnId)
     let avanzado
-    if (ns.length && conceptoId === CONCEPTO_DROP) avanzado = ns.filter(n => n.construida).reduce((s, n) => s + num(n.metros_lineales), 0)
-    else if (ns.length && conceptoId === CONCEPTO_NAP) avanzado = ns.filter(n => n.construida).length
+    if (ns.length && conceptoId === CONCEPTO_DROP) avanzado = ns.filter(n => n.drop_tendido).reduce((s, n) => s + num(n.metros_lineales), 0)
+    else if (ns.length && conceptoId === CONCEPTO_NAP) avanzado = ns.filter(n => n.nap_instalada).length
     else if (ns.length && conceptoId === CONCEPTO_POTENCIA) avanzado = ns.filter(n => n.medida).length
     else avanzado = avancesDe(odnId).filter(a => a.concepto_id === conceptoId).reduce((s, a) => s + num(a.cantidad), 0)
     const pct = alcance > 0 ? Math.min(100, (avanzado / alcance) * 100) : 0
@@ -107,9 +107,11 @@ export function useODN() {
     return {
       etapas, naps: ns,
       napsConstruidas: ns.filter(n => n.construida).length,
+      napsDrop: ns.filter(n => n.drop_tendido).length,
+      napsInstaladas: ns.filter(n => n.nap_instalada).length,
       napsMedidas: ns.filter(n => n.medida).length,
       mlTotal: ns.reduce((s, n) => s + num(n.metros_lineales), 0),
-      mlConstruidos: ns.filter(n => n.construida).reduce((s, n) => s + num(n.metros_lineales), 0),
+      mlConstruidos: ns.filter(n => n.drop_tendido).reduce((s, n) => s + num(n.metros_lineales), 0),
       valorTotal, valorAvanzado: valorAvanzado + avancesGeneral, valorCobrado,
       pct: valorTotal > 0 ? (valorAvanzado / valorTotal) * 100 : 0,
       estado: esGeneral(odnId) ? 'General' : etapas.length && etapas.every(e => e.cobro) ? 'Cobrada' : etapas.some(e => e.terminada) ? 'Parcial' : valorAvanzado > 0 ? 'En proceso' : 'Sin iniciar',
@@ -175,24 +177,36 @@ export function useODN() {
     return { data, error }
   }
 
-  // Construcción por NAPs: marca NAPs como construidas, registra avance de drop y NAP, cierra etapa si aplica
-  async function registrarConstruccion({ odn_id, nap_ids, cuadrilla_id, fecha, notas }) {
-    const sel = napsDe(odn_id).filter(n => nap_ids.includes(n.id) && !n.construida)
+  // Construcción por NAPs, en dos actividades independientes: drop tendido y NAP instalado.
+  // La etapa cierra (y cobra) cuando todos los NAPs tienen ambas.
+  async function registrarDrop({ odn_id, nap_ids, cuadrilla_id, fecha, notas }) {
+    const sel = napsDe(odn_id).filter(n => nap_ids.includes(n.id) && !n.drop_tendido)
     if (!sel.length) return { error: { message: 'No hay NAPs nuevos por registrar.' } }
     const ml = sel.reduce((s, n) => s + num(n.metros_lineales), 0)
     const mlTotal = napsDe(odn_id).reduce((s, n) => s + num(n.metros_lineales), 0)
-    const napTotal = napsDe(odn_id).length
-    const a1 = await insertarAvance({ odn_id, concepto_id: CONCEPTO_DROP, cuadrilla_id, fecha, cantidad: ml, porcentaje: mlTotal ? (ml / mlTotal) * 100 : null, notas })
-    if (a1.error) return { error: a1.error }
-    const a2 = await insertarAvance({ odn_id, concepto_id: CONCEPTO_NAP, cuadrilla_id, fecha, cantidad: sel.length, porcentaje: napTotal ? (sel.length / napTotal) * 100 : null, notas })
-    if (a2.error) return { error: a2.error }
+    const a = await insertarAvance({ odn_id, concepto_id: CONCEPTO_DROP, cuadrilla_id, fecha, cantidad: ml, porcentaje: mlTotal ? (ml / mlTotal) * 100 : null, notas })
+    if (a.error) return { error: a.error }
     const { error } = await supabase.from('odn_naps')
-      .update({ construida: true, construida_fecha: fecha, construida_cuadrilla_id: cuadrilla_id || null, construida_avance_id: a1.data.id })
+      .update({ drop_tendido: true, drop_fecha: fecha, drop_cuadrilla_id: cuadrilla_id || null, drop_avance_id: a.data.id })
       .in('id', sel.map(n => n.id))
     if (error) return { error }
     const cierre = await verificarCierreEtapa(odn_id, 'Construcción', fecha)
     await load()
     return { error: null, naps: sel.length, ml, cierre }
+  }
+  async function registrarNaps({ odn_id, nap_ids, cuadrilla_id, fecha, notas }) {
+    const sel = napsDe(odn_id).filter(n => nap_ids.includes(n.id) && !n.nap_instalada)
+    if (!sel.length) return { error: { message: 'No hay NAPs nuevos por registrar.' } }
+    const napTotal = napsDe(odn_id).length
+    const a = await insertarAvance({ odn_id, concepto_id: CONCEPTO_NAP, cuadrilla_id, fecha, cantidad: sel.length, porcentaje: napTotal ? (sel.length / napTotal) * 100 : null, notas })
+    if (a.error) return { error: a.error }
+    const { error } = await supabase.from('odn_naps')
+      .update({ nap_instalada: true, nap_fecha: fecha, nap_cuadrilla_id: cuadrilla_id || null, nap_avance_id: a.data.id })
+      .in('id', sel.map(n => n.id))
+    if (error) return { error }
+    const cierre = await verificarCierreEtapa(odn_id, 'Construcción', fecha)
+    await load()
+    return { error: null, naps: sel.length, cierre }
   }
 
   // Potencias por NAPs: marca NAPs medidas, registra avance, cierra etapa si aplica
@@ -250,9 +264,10 @@ export function useODN() {
     const a = avances.find(x => x.id === id)
     if (!a) return { error: { message: 'Avance no encontrado' } }
     if (a.concepto_id === CONCEPTO_DROP) {
-      await supabase.from('odn_naps').update({ construida: false, construida_fecha: null, construida_cuadrilla_id: null, construida_avance_id: null }).eq('construida_avance_id', id)
-      // el avance de NAP hermano (misma odn, fecha, cuadrilla, concepto NAP) se elimina también
-      await supabase.from('odn_avances').delete().eq('odn_id', a.odn_id).eq('concepto_id', CONCEPTO_NAP).eq('fecha', a.fecha).eq('created_at', a.created_at)
+      await supabase.from('odn_naps').update({ drop_tendido: false, drop_fecha: null, drop_cuadrilla_id: null, drop_avance_id: null }).eq('drop_avance_id', id)
+    }
+    if (a.concepto_id === CONCEPTO_NAP) {
+      await supabase.from('odn_naps').update({ nap_instalada: false, nap_fecha: null, nap_cuadrilla_id: null, nap_avance_id: null }).eq('nap_avance_id', id)
     }
     if (a.concepto_id === CONCEPTO_POTENCIA) {
       await supabase.from('odn_naps').update({ medida: false, medida_fecha: null, medida_cuadrilla_id: null, medida_avance_id: null }).eq('medida_avance_id', id)
@@ -327,7 +342,7 @@ export function useODN() {
     odns, naps, alcances, avances, cobros, conceptos, ramas, loading, error, reload: load, fmt$,
     getConcepto, getODN, esGeneral, seCobraPorAvance, napsDe, alcancesDe, avancesDe, cobrosDe, cobroEtapa, esEtapaPorNaps,
     resumenConcepto, resumenEtapa, resumenODN, resumenSemana,
-    registrarConstruccion, registrarMedicion, registrarAvance, liberarParcial, eliminarAvance, eliminarCobro,
+    registrarDrop, registrarNaps, registrarMedicion, registrarAvance, liberarParcial, eliminarAvance, eliminarCobro,
     addODN, updateODN, deleteODN, addNaps, updateNap, deleteNap, setAlcance,
   }
 }
