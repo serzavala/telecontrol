@@ -48,6 +48,9 @@ export function useODN() {
   // ───────────────────────── Consultas ─────────────────────────
   const getConcepto = (id) => conceptos.find(c => c.id === id) || { nombre: '—', unidad: '', precio: 0, etapa: 'Otros', cobro_por: 'Avance' }
   const getODN = (id) => odns.find(o => o.id === id) || { rama: '—', nombre: '—', tipo: 'ODN' }
+  // En elementos GENERAL todo se cobra por avance (no hay alcance ni cierre de etapa)
+  const esGeneral = (odnId) => getODN(odnId).tipo === 'GENERAL'
+  const seCobraPorAvance = (odnId, conceptoId) => esGeneral(odnId) || getConcepto(conceptoId).cobro_por === 'Avance'
   const napsDe = (odnId) => naps.filter(n => n.odn_id === odnId)
   const alcancesDe = (odnId) => alcances.filter(a => a.odn_id === odnId)
   const avancesDe = (odnId) => avances.filter(a => a.odn_id === odnId)
@@ -99,16 +102,17 @@ export function useODN() {
     const ns = napsDe(odnId)
     const valorTotal = etapas.reduce((s, e) => s + e.importeAlcance, 0)
     const valorAvanzado = etapas.reduce((s, e) => s + e.importeAvanzado, 0)
-    const valorCobrado = cobrosDe(odnId).reduce((s, c) => s + num(c.importe), 0)
+    const avancesGeneral = esGeneral(odnId) ? avancesDe(odnId).reduce((s, a) => s + num(a.total), 0) : 0
+    const valorCobrado = cobrosDe(odnId).reduce((s, c) => s + num(c.importe), 0) + avancesGeneral
     return {
       etapas, naps: ns,
       napsConstruidas: ns.filter(n => n.construida).length,
       napsMedidas: ns.filter(n => n.medida).length,
       mlTotal: ns.reduce((s, n) => s + num(n.metros_lineales), 0),
       mlConstruidos: ns.filter(n => n.construida).reduce((s, n) => s + num(n.metros_lineales), 0),
-      valorTotal, valorAvanzado, valorCobrado,
+      valorTotal, valorAvanzado: valorAvanzado + avancesGeneral, valorCobrado,
       pct: valorTotal > 0 ? (valorAvanzado / valorTotal) * 100 : 0,
-      estado: etapas.length && etapas.every(e => e.cobro) ? 'Cobrada' : etapas.some(e => e.terminada) ? 'Parcial' : valorAvanzado > 0 ? 'En proceso' : 'Sin iniciar',
+      estado: esGeneral(odnId) ? 'General' : etapas.length && etapas.every(e => e.cobro) ? 'Cobrada' : etapas.some(e => e.terminada) ? 'Parcial' : valorAvanzado > 0 ? 'En proceso' : 'Sin iniciar',
     }
   }
 
@@ -116,7 +120,7 @@ export function useODN() {
   function resumenSemana(semana, anio) {
     const cobrosSem = cobros.filter(c => Number(c.semana) === Number(semana) && Number(c.anio) === Number(anio))
     const avancesSem = avances.filter(a => Number(a.semana) === Number(semana) && Number(a.anio) === Number(anio))
-    const avancesPorAvance = avancesSem.filter(a => getConcepto(a.concepto_id).cobro_por === 'Avance')
+    const avancesPorAvance = avancesSem.filter(a => seCobraPorAvance(a.odn_id, a.concepto_id))
     const facturableCobros = cobrosSem.reduce((s, c) => s + num(c.importe), 0)
     const facturableAvances = avancesPorAvance.reduce((s, a) => s + num(a.total), 0)
     const real = avancesSem.reduce((s, a) => s + num(a.total), 0)
@@ -219,7 +223,7 @@ export function useODN() {
     const a = await insertarAvance({ odn_id, concepto_id, cuadrilla_id, fecha, cantidad: cant, porcentaje: pct, notas })
     if (a.error) return { error: a.error }
     const etapa = r.concepto.etapa
-    const cierre = r.concepto.cobro_por === 'Terminada' ? await verificarCierreEtapa(odn_id, etapa, fecha) : { cerrada: false }
+    const cierre = r.concepto.cobro_por === 'Terminada' && !esGeneral(odn_id) ? await verificarCierreEtapa(odn_id, etapa, fecha) : { cerrada: false }
     await load()
     return { error: null, cantidad: cant, cierre }
   }
@@ -321,7 +325,7 @@ export function useODN() {
 
   return {
     odns, naps, alcances, avances, cobros, conceptos, ramas, loading, error, reload: load, fmt$,
-    getConcepto, getODN, napsDe, alcancesDe, avancesDe, cobrosDe, cobroEtapa, esEtapaPorNaps,
+    getConcepto, getODN, esGeneral, seCobraPorAvance, napsDe, alcancesDe, avancesDe, cobrosDe, cobroEtapa, esEtapaPorNaps,
     resumenConcepto, resumenEtapa, resumenODN, resumenSemana,
     registrarConstruccion, registrarMedicion, registrarAvance, liberarParcial, eliminarAvance, eliminarCobro,
     addODN, updateODN, deleteODN, addNaps, updateNap, deleteNap, setAlcance,

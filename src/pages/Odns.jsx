@@ -5,7 +5,7 @@ import Modal from '../components/Modal'
 
 const hoyStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const ETAPA_COLOR = { 'Construcción': '#0F3460', 'Fusiones': '#946200', 'Potencias': '#1A7A45', 'Otros': '#6B7A99' }
-const ESTADO_BADGE = { 'Sin iniciar': 'badge-gray', 'En proceso': 'badge-blue', 'Parcial': 'badge-amber', 'Cobrada': 'badge-green' }
+const ESTADO_BADGE = { 'Sin iniciar': 'badge-gray', 'En proceso': 'badge-blue', 'Parcial': 'badge-amber', 'Cobrada': 'badge-green', 'General': 'badge-novus' }
 const pct = (n) => `${Math.round(n)}%`
 
 function Barra({ valor, color }) {
@@ -183,7 +183,12 @@ export default function Odns() {
           const pendConstr = r.naps.filter(n => !n.construida)
           const pendMed = r.naps.filter(n => !n.medida)
           const potEtapa = r.etapas.find(e => e.etapa === 'Potencias')
-          const conceptosDisp = odn.alcancesDe(avanceModal.id).map(a => odn.resumenConcepto(avanceModal.id, a.concepto_id)).filter(x => ![CONCEPTO_DROP, CONCEPTO_NAP, CONCEPTO_POTENCIA].includes(x.concepto.id))
+          const general = odn.esGeneral(avanceModal.id)
+          const idsAlcance = odn.alcancesDe(avanceModal.id).map(a => a.concepto_id)
+          const conceptosDisp = odn.conceptos
+            .filter(c => general || idsAlcance.includes(c.id) || c.etapa === 'Otros')
+            .filter(c => general || ![CONCEPTO_DROP, CONCEPTO_NAP, CONCEPTO_POTENCIA].includes(c.id) || !r.naps.length)
+            .map(c => odn.resumenConcepto(avanceModal.id, c.id))
           const cSel = conceptosDisp.find(x => x.concepto.id === av.concepto_id)
           const toggle = (id, on) => setAv(f => ({ ...f, nap_ids: on ? [...new Set([...f.nap_ids, id])] : f.nap_ids.filter(x => x !== id) }))
           const listaNaps = av.modo === 'construccion' ? pendConstr : pendMed
@@ -250,16 +255,16 @@ export default function Odns() {
                   <div><label className="label">Concepto</label>
                     <select className="input" value={av.concepto_id} onChange={setA('concepto_id')}>
                       <option value="">Seleccionar...</option>
-                      {conceptosDisp.map(x => <option key={x.concepto.id} value={x.concepto.id}>{x.concepto.nombre} — {x.avanzado.toLocaleString('es-MX')} / {x.alcance.toLocaleString('es-MX')} {x.concepto.unidad} ({pct(x.pct)})</option>)}
+                      {conceptosDisp.map(x => <option key={x.concepto.id} value={x.concepto.id}>{x.concepto.nombre}{x.alcance > 0 ? ` — ${x.avanzado.toLocaleString('es-MX')} / ${x.alcance.toLocaleString('es-MX')} ${x.concepto.unidad} (${pct(x.pct)})` : ` — ${x.avanzado.toLocaleString('es-MX')} ${x.concepto.unidad} registrados (sin alcance)`}</option>)}
                     </select>
                   </div>
                   {cSel && (
                     <div className="form-row c2">
-                      <div><label className="label">Cantidad ({cSel.concepto.unidad}) · restan {cSel.restante.toLocaleString('es-MX')}</label><input className="input" type="number" min="0" step="1" value={av.cantidad} onChange={e => setAv(f => ({ ...f, cantidad: e.target.value, porcentaje: '' }))} /></div>
-                      <div><label className="label">…o porcentaje de esta vez (%)</label><input className="input" type="number" min="0" max="100" step="1" value={av.porcentaje} onChange={e => setAv(f => ({ ...f, porcentaje: e.target.value, cantidad: '' }))} /></div>
+                      <div><label className="label">Cantidad ({cSel.concepto.unidad}){cSel.alcance > 0 ? ` · restan ${cSel.restante.toLocaleString('es-MX')}` : ''}</label><input className="input" type="number" min="0" step="1" value={av.cantidad} onChange={e => setAv(f => ({ ...f, cantidad: e.target.value, porcentaje: '' }))} /></div>
+                      {cSel.alcance > 0 && <div><label className="label">…o porcentaje de esta vez (%)</label><input className="input" type="number" min="0" max="100" step="1" value={av.porcentaje} onChange={e => setAv(f => ({ ...f, porcentaje: e.target.value, cantidad: '' }))} /></div>}
                     </div>
                   )}
-                  {cSel && <div style={{ fontSize: 12, color: 'var(--tc-text-muted)' }}>{cSel.concepto.cobro_por === 'Avance' ? 'Este concepto se cobra cada semana por lo avanzado.' : 'Este concepto se cobra al llegar al 100% del alcance.'} Importe de este avance: <strong style={{ color: 'var(--tc-text)' }}>{odn.fmt$((av.porcentaje !== '' ? cSel.alcance * Number(av.porcentaje) / 100 : Number(av.cantidad || 0)) * cSel.precio)}</strong></div>}
+                  {cSel && <div style={{ fontSize: 12, color: 'var(--tc-text-muted)' }}>{odn.seCobraPorAvance(avanceModal.id, cSel.concepto.id) ? 'Se cobra en la semana de la fecha por lo registrado.' : 'Este concepto se cobra al llegar al 100% del alcance.'} Importe de este avance: <strong style={{ color: 'var(--tc-text)' }}>{odn.fmt$((av.porcentaje !== '' ? cSel.alcance * Number(av.porcentaje) / 100 : Number(av.cantidad || 0)) * cSel.precio)}</strong></div>}
                 </div>
               )}
 
@@ -328,7 +333,7 @@ export default function Odns() {
           <div className="form-row c3">
             <div><label className="label">Rama *</label><input className="input" placeholder="13" value={nuevo.rama} onChange={setN('rama')} /></div>
             <div><label className="label">Tipo</label>
-              <select className="input" value={nuevo.tipo} onChange={setN('tipo')}><option value="ODN">ODN</option><option value="CE">CE (cierre de empalme)</option></select>
+              <select className="input" value={nuevo.tipo} onChange={setN('tipo')}><option value="ODN">ODN</option><option value="CE">CE / ED (cierre de empalme)</option><option value="HUB">HUB</option><option value="TRAMO">Tramo de fibra</option><option value="GENERAL">General (renta, ISDP…)</option></select>
             </div>
             <div><label className="label">Nombre *</label><input className="input" placeholder={nuevo.tipo === 'CE' ? 'CE01' : 'ODN30'} value={nuevo.nombre} onChange={setN('nombre')} /></div>
           </div>

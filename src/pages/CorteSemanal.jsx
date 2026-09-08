@@ -37,9 +37,9 @@ export default function CorteSemanal() {
   const cobrosPer = odn.cobros.filter(c => enPeriodo(c.fecha) && odnEnProy(odn.getODN(c.odn_id)))
   // 2) Conceptos "por avance" (fusiones, otros) avanzados en el período
   const avancesPer = odn.avances.filter(a => enPeriodo(a.fecha) && odnEnProy(odn.getODN(a.odn_id)))
-  const avancesFact = avancesPer.filter(a => odn.getConcepto(a.concepto_id).cobro_por === 'Avance')
+  const avancesFact = avancesPer.filter(a => odn.seCobraPorAvance(a.odn_id, a.concepto_id))
   // Avance real de etapas "al terminar" que aún no tienen cobro (si la etapa ya se cobró, su avance ya está en el cobro)
-  const avancesNoFact = avancesPer.filter(a => odn.getConcepto(a.concepto_id).cobro_por !== 'Avance' && !odn.cobroEtapa(a.odn_id, odn.getConcepto(a.concepto_id).etapa))
+  const avancesNoFact = avancesPer.filter(a => !odn.seCobraPorAvance(a.odn_id, a.concepto_id) && !odn.cobroEtapa(a.odn_id, odn.getConcepto(a.concepto_id).etapa))
 
   // Filas de cobro por concepto, con la forma que usa el PDF (fecha, cuadrilla, concepto, proyecto, cantidad, precio, total)
   const filasCobros = cobrosPer.flatMap(c => {
@@ -58,7 +58,7 @@ export default function CorteSemanal() {
         cantidad: Number(a.cantidad), precio_unitario: Number(con.precio), total: Number(a.cantidad) * Number(con.precio), etiqueta: `${o.nombre} · ${c.etapa}`,
       }))
   })
-  const filasAvanceFact = avancesFact.map(a => { const o = odn.getODN(a.odn_id); return ({ ...a, etiqueta: `${o.nombre} · ${odn.getConcepto(a.concepto_id).etapa} (por avance)` }) })
+  const filasAvanceFact = avancesFact.map(a => { const o = odn.getODN(a.odn_id); return ({ ...a, etiqueta: `${o.tipo === 'GENERAL' ? 'Rama ' + o.rama + ' · General' : o.nombre + ' · ' + odn.getConcepto(a.concepto_id).etapa} (por avance)` }) })
   const filasODN = [...filasCobros, ...filasAvanceFact]
   const totalODN = filasODN.reduce((s, r) => s + Number(r.total), 0)
   const totalRealODN = avancesPer.reduce((s, a) => s + Number(a.total), 0)
