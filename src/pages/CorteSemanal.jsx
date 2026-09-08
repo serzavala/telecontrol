@@ -5,6 +5,8 @@ import { generarPDFSemanal } from '../lib/pdf'
 import { getSemana, getSemanaISO } from '../lib/fechas'
 
 const IVA_RATE = 0.16
+// A partir de esta fecha lo facturable sale solo de ODNs; la tabla "produccion" queda como avance real por cuadrilla
+const CORTE_ODN_DESDE = '2026-08-28'
 
 export default function CorteSemanal() {
   const db = useDB()
@@ -23,8 +25,11 @@ export default function CorteSemanal() {
   const enPeriodo = (fecha) => (!filtros.inicio || !filtros.fin) || (fecha >= filtros.inicio && fecha <= filtros.fin)
 
   // ── Producción anterior (tabla produccion) ──
-  const rows = db.produccion.filter(r => enPeriodo(r.fecha) && (!filtros.proyecto_id || r.proyecto_id === filtros.proyecto_id))
+  const rowsTodas = db.produccion.filter(r => enPeriodo(r.fecha) && (!filtros.proyecto_id || r.proyecto_id === filtros.proyecto_id))
+  const rows = rowsTodas.filter(r => r.fecha < CORTE_ODN_DESDE)          // facturable (antes del esquema ODN)
+  const rowsReal = rowsTodas.filter(r => r.fecha >= CORTE_ODN_DESDE)     // avance real por cuadrilla (no facturable)
   const totalProd = rows.reduce((a, r) => a + Number(r.total), 0)
+  const totalProdReal = rowsReal.reduce((a, r) => a + Number(r.total), 0)
 
   // ── Nuevo esquema: ODNs ──
   const odnEnProy = (o) => !filtros.proyecto_id || o.proyecto_id === filtros.proyecto_id
@@ -61,7 +66,7 @@ export default function CorteSemanal() {
 
   // ── Totales ──
   const total = totalProd + totalODN
-  const cuadsUniq = [...new Set([...rows.map(r => r.cuadrilla_id), ...avancesPer.map(a => a.cuadrilla_id)].filter(Boolean))]
+  const cuadsUniq = [...new Set([...rowsTodas.map(r => r.cuadrilla_id), ...avancesPer.map(a => a.cuadrilla_id)].filter(Boolean))]
   const filasPDF = [...rows, ...filasODN]
 
   const oficial = parseFloat(cifraOficial) || 0
@@ -168,7 +173,7 @@ export default function CorteSemanal() {
             <div className="metric"><div className="metric-label">Registros</div><div className="metric-value">{filasPDF.length}</div><div className="metric-sub">{rows.length} producción · {filasODN.length} ODN</div></div>
             <div className="metric"><div className="metric-label">Cuadrillas</div><div className="metric-value">{cuadsUniq.length}</div></div>
             <div className="metric metric-primary"><div className="metric-label">Mi estimado (facturable)</div><div className="metric-value">{db.fmt$(total)}</div><div className="metric-sub">{db.fmt$(totalProd)} prod. + {db.fmt$(totalODN)} ODN</div></div>
-            <div className="metric metric-gold"><div className="metric-label">Avance real ODN (no todo se cobra)</div><div className="metric-value">{db.fmt$(totalRealODN)}</div><div className="metric-sub">{db.fmt$(totalNoFact)} en ODNs sin cerrar</div></div>
+            <div className="metric metric-gold"><div className="metric-label">Avance real (no todo se cobra)</div><div className="metric-value">{db.fmt$(totalRealODN + totalProdReal)}</div><div className="metric-sub">{db.fmt$(totalRealODN)} ODN · {db.fmt$(totalProdReal)} bitácora cuadrillas</div></div>
           </div>
 
           <div className="card mb-4">
@@ -236,19 +241,31 @@ export default function CorteSemanal() {
             </div>
           )}
 
-          {/* Producción anterior */}
-          <div className="card p-0 overflow-hidden">
-            <div style={{ padding: '8px 12px', background: 'var(--tc-bg)', color: 'var(--tc-text-muted)', fontSize: 12, fontWeight: 500, display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--tc-border)' }}>
-              <span>Producción registrada por cantidad (esquema anterior)</span><span>{db.fmt$(totalProd)}</span>
+          {/* Bitácora de cuadrillas desde el esquema ODN: avance real, no facturable */}
+          {rowsReal.length > 0 && (
+            <div className="card p-0 overflow-hidden mb-4">
+              <div style={{ padding: '8px 12px', background: 'rgba(245,166,35,0.15)', color: '#946200', fontSize: 12, fontWeight: 500, display: 'flex', justifyContent: 'space-between' }}>
+                <span>Bitácora de cuadrillas (Producción semanal) — avance real, NO se suma al corte desde el {CORTE_ODN_DESDE}</span><span>{db.fmt$(totalProdReal)}</span>
+              </div>
+              <table className="w-full">
+                <Cabecera />
+                <tbody>{rowsReal.map(r => <Fila key={r.id} r={r} />)}</tbody>
+              </table>
             </div>
-            <table className="w-full">
-              <Cabecera />
-              <tbody>
-                {rows.length ? rows.map(r => <Fila key={r.id} r={r} />)
-                  : <tr><td colSpan={7} className="td text-center text-gray-400 py-6">Sin registros de producción en ese período.</td></tr>}
-              </tbody>
-            </table>
-          </div>
+          )}
+
+          {/* Producción facturable anterior al esquema ODN */}
+          {rows.length > 0 && (
+            <div className="card p-0 overflow-hidden">
+              <div style={{ padding: '8px 12px', background: 'var(--tc-bg)', color: 'var(--tc-text-muted)', fontSize: 12, fontWeight: 500, display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--tc-border)' }}>
+                <span>Producción facturable por cantidad (antes del {CORTE_ODN_DESDE})</span><span>{db.fmt$(totalProd)}</span>
+              </div>
+              <table className="w-full">
+                <Cabecera />
+                <tbody>{rows.map(r => <Fila key={r.id} r={r} />)}</tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
     </div>
