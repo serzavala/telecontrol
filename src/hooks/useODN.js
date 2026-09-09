@@ -103,7 +103,10 @@ export function useODN() {
     const valorTotal = etapas.reduce((s, e) => s + e.importeAlcance, 0)
     const valorAvanzado = etapas.reduce((s, e) => s + e.importeAvanzado, 0)
     const avancesGeneral = esGeneral(odnId) ? avancesDe(odnId).reduce((s, a) => s + num(a.total), 0) : 0
-    const valorCobrado = cobrosDe(odnId).reduce((s, c) => s + num(c.importe), 0) + avancesGeneral
+    const avsPorAvance = avancesDe(odnId).filter(a => !esGeneral(odnId) && seCobraPorAvance(odnId, a.concepto_id))
+    const valorCobrado = cobrosDe(odnId).reduce((s, c) => s + num(c.importe), 0) + avancesGeneral + avsPorAvance.reduce((s, a) => s + num(a.total), 0)
+    const valorPagado = cobrosDe(odnId).filter(c => c.pagado).reduce((s, c) => s + num(c.importe), 0)
+      + avancesDe(odnId).filter(a => a.pagado && seCobraPorAvance(odnId, a.concepto_id)).reduce((s, a) => s + num(a.total), 0)
     return {
       etapas, naps: ns,
       napsConstruidas: ns.filter(n => n.construida).length,
@@ -112,7 +115,7 @@ export function useODN() {
       napsMedidas: ns.filter(n => n.medida).length,
       mlTotal: ns.reduce((s, n) => s + num(n.metros_lineales), 0),
       mlConstruidos: ns.filter(n => n.drop_tendido).reduce((s, n) => s + num(n.metros_lineales), 0),
-      valorTotal, valorAvanzado: valorAvanzado + avancesGeneral, valorCobrado,
+      valorTotal, valorAvanzado: valorAvanzado + avancesGeneral, valorCobrado, valorPagado,
       pct: valorTotal > 0 ? (valorAvanzado / valorTotal) * 100 : 0,
       estado: esGeneral(odnId) ? 'General' : etapas.length && etapas.every(e => e.cobro) ? 'Cobrada' : etapas.some(e => e.terminada) ? 'Parcial' : valorAvanzado > 0 ? 'En proceso' : 'Sin iniciar',
     }
@@ -126,7 +129,9 @@ export function useODN() {
     const facturableCobros = cobrosSem.reduce((s, c) => s + num(c.importe), 0)
     const facturableAvances = avancesPorAvance.reduce((s, a) => s + num(a.total), 0)
     const real = avancesSem.reduce((s, a) => s + num(a.total), 0)
-    return { cobros: cobrosSem, avances: avancesSem, avancesPorAvance, facturableCobros, facturableAvances, facturable: facturableCobros + facturableAvances, real }
+    const pagado = cobrosSem.filter(c => c.pagado).reduce((s, c) => s + num(c.importe), 0) + avancesPorAvance.filter(a => a.pagado).reduce((s, a) => s + num(a.total), 0)
+    const todoPagado = (cobrosSem.length + avancesPorAvance.length) > 0 && cobrosSem.every(c => c.pagado) && avancesPorAvance.every(a => a.pagado)
+    return { pagado, todoPagado, cobros: cobrosSem, avances: avancesSem, avancesPorAvance, facturableCobros, facturableAvances, facturable: facturableCobros + facturableAvances, real }
   }
 
   // ───────────────────────── Cierre de etapa ─────────────────────────
@@ -253,6 +258,28 @@ export function useODN() {
     return { error, importe }
   }
 
+  // Pago del cliente por semana: marca/desmarca cobros y avances "por avance" de esa semana
+  async function marcarSemanaPagada(semana, anio, pagado = true, fecha = null) {
+    const upd = { pagado, pagado_fecha: pagado ? (fecha || new Date().toISOString().split('T')[0]) : null }
+    const e1 = await supabase.from('odn_cobros').update(upd).eq('semana', semana).eq('anio', anio)
+    if (e1.error) return { error: e1.error }
+    const idsAvance = avances.filter(a => Number(a.semana) === Number(semana) && Number(a.anio) === Number(anio) && seCobraPorAvance(a.odn_id, a.concepto_id)).map(a => a.id)
+    if (idsAvance.length) {
+      const e2 = await supabase.from('odn_avances').update(upd).in('id', idsAvance)
+      if (e2.error) return { error: e2.error }
+    }
+    await load()
+    return { error: null }
+  }
+  // Estado de pago de una etapa: 'pagado' | 'pendiente' | null (nada a cobro aún)
+  function estadoPagoEtapa(odnId, etapa) {
+    const cob = cobroEtapa(odnId, etapa)
+    if (cob) return cob.pagado ? 'pagado' : 'pendiente'
+    const avs = avancesDe(odnId).filter(a => getConcepto(a.concepto_id).etapa === etapa && seCobraPorAvance(odnId, a.concepto_id))
+    if (!avs.length) return null
+    return avs.every(a => a.pagado) ? 'pagado' : 'pendiente'
+  }
+
   async function eliminarCobro(id) {
     const { error } = await supabase.from('odn_cobros').delete().eq('id', id)
     if (!error) await load()
@@ -343,6 +370,7 @@ export function useODN() {
     getConcepto, getODN, esGeneral, seCobraPorAvance, napsDe, alcancesDe, avancesDe, cobrosDe, cobroEtapa, esEtapaPorNaps,
     resumenConcepto, resumenEtapa, resumenODN, resumenSemana,
     registrarDrop, registrarNaps, registrarMedicion, registrarAvance, liberarParcial, eliminarAvance, eliminarCobro,
+    marcarSemanaPagada, estadoPagoEtapa,
     addODN, updateODN, deleteODN, addNaps, updateNap, deleteNap, setAlcance,
   }
 }

@@ -11,6 +11,7 @@ const ANIO_ACTUAL = new Date(semActual.fin + 'T12:00:00').getFullYear()
 const hoyStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const ETAPA_COLOR = { 'Construcción': '#0F3460', 'Fusiones': '#946200', 'Potencias': '#1A7A45', 'Otros': '#6B7A99' }
 const ESTADO_BADGE = { 'Sin iniciar': 'badge-gray', 'En proceso': 'badge-blue', 'Parcial': 'badge-amber', 'Cobrada': 'badge-green', 'General': 'badge-novus' }
+const ETIQUETA_ESTADO = (r) => r.estado === 'Parcial' && r.valorPagado > 0 ? 'Pago parcial' : r.estado
 const pct = (n) => `${Math.round(n)}%`
 
 function Barra({ valor, color }) {
@@ -139,6 +140,10 @@ export default function Odns() {
           <div style={{ fontWeight: 500 }}>Semana {sem.semana} <span style={{ fontWeight: 400, color: 'var(--tc-text-muted)', fontSize: 12 }}>· {fmtSemanaLabel(semRango)}</span></div>
           <button type="button" className="btn btn-outline btn-sm" onClick={() => moverSem(1)}>›</button>
           {sem.semana !== SEM_ACTUAL && <button type="button" className="btn btn-gold btn-sm" onClick={() => setSem({ semana: SEM_ACTUAL, anio: ANIO_ACTUAL })}>Semana actual</button>}
+          {(semCobros + semPorAvance) > 0 && (rs.todoPagado
+            ? <button type="button" className="btn btn-outline btn-sm" style={{ color: '#1A7A45', borderColor: '#1A7A45' }} onClick={async () => { if (confirm(`¿Quitar la marca de pagado a la semana ${sem.semana}?`)) { const r = await odn.marcarSemanaPagada(sem.semana, sem.anio, false); if (r.error) alert(r.error.message) } }}>✓ Semana pagada (deshacer)</button>
+            : <button type="button" className="btn btn-sm" style={{ background: '#1A7A45', color: '#fff', border: 'none' }} onClick={async () => { if (confirm(`Se marcará como PAGADO por el cliente todo lo pasado a cobro en la semana ${sem.semana} (${odn.fmt$(semCobros + semPorAvance)}). ¿Continuar?`)) { const r = await odn.marcarSemanaPagada(sem.semana, sem.anio, true); if (r.error) alert(r.error.message) } }}>Marcar semana {sem.semana} como pagada</button>
+          )}
           <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--tc-text-muted)' }}>
             {semDrop.toLocaleString('es-MX')} m drop · {semNaps} NAPs · {semFus} fusiones · {semPot} potencias{filtros.rama ? ` · rama ${filtros.rama}` : ''}
           </span>
@@ -147,7 +152,7 @@ export default function Odns() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <div className="metric metric-gold"><div className="metric-label">Producido esta semana (real)</div><div className="metric-value">{odn.fmt$(semReal)}</div><div className="metric-sub">Todo lo avanzado, se cobre o no</div></div>
-        <div className="metric metric-primary"><div className="metric-label">A cobro esta semana</div><div className="metric-value">{odn.fmt$(semCobros + semPorAvance)}</div><div className="metric-sub">{odn.fmt$(semCobros)} etapas cerradas · {odn.fmt$(semPorAvance)} por avance</div></div>
+        <div className="metric metric-primary"><div className="metric-label">A cobro esta semana</div><div className="metric-value">{odn.fmt$(semCobros + semPorAvance)}</div><div className="metric-sub">{odn.fmt$(semCobros)} etapas cerradas · {odn.fmt$(semPorAvance)} por avance{rs.pagado > 0 && <> · <span style={{ color: '#7ED4A0' }}>pagado {odn.fmt$(rs.pagado)}</span></>}</div></div>
         <div className="metric metric-light"><div className="metric-label">Avanzado sin pasar a cobro</div><div className="metric-value" style={{ color: '#946200' }}>{odn.fmt$(Math.max(0, tot.avanzado - tot.cobrado))}</div><div className="metric-sub">Acumulado en ODNs sin cerrar</div></div>
         <div className="metric metric-light"><div className="metric-label">Alcance total</div><div className="metric-value" style={{ color: 'var(--tc-text)' }}>{odn.fmt$(tot.valor)}</div><div className="metric-sub">{lista.length} elementos · {tot.valor ? pct(tot.avanzado / tot.valor * 100) : '—'} avanzado · {odn.fmt$(tot.cobrado)} a cobro acumulado</div></div>
       </div>
@@ -172,11 +177,15 @@ export default function Odns() {
               const celda = (nombre) => {
                 const e = et(nombre)
                 if (!e) return <span style={{ color: '#A0AABB', fontSize: 11 }}>—</span>
+                const pago = odn.estadoPagoEtapa(o.id, nombre)
+                const colorPago = pago === 'pagado' ? '#1A7A45' : pago === 'pendiente' ? '#946200' : 'var(--tc-text-muted)'
                 return (
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
-                      <span style={{ color: e.cobro ? '#1A7A45' : e.terminada ? '#946200' : 'var(--tc-text-muted)' }}>
-                        {e.cobro ? `✓ A cobro sem ${e.cobro.semana}${e.cobro.tipo === 'Parcial' ? ' (parcial)' : ''}` : e.terminada ? 'Terminada' : pct(e.pct)}
+                      <span style={{ color: colorPago, fontWeight: pago ? 500 : 400 }}>
+                        {e.cobro
+                          ? (pago === 'pagado' ? `✓ Pagado sem ${e.cobro.semana}` : `⏳ A cobro sem ${e.cobro.semana} · pend. pago`) + (e.cobro.tipo === 'Parcial' ? ' (parcial)' : '')
+                          : pago ? `${pct(e.pct)} · ${pago === 'pagado' ? '✓ pagado' : '⏳ pend. pago'}` : e.terminada ? 'Terminada' : pct(e.pct)}
                       </span>
                       <span style={{ color: 'var(--tc-text-muted)' }}>{odn.fmt$(e.importeAlcance)}</span>
                     </div>
@@ -196,8 +205,8 @@ export default function Odns() {
                   <td className="td">{celda('Construcción')}</td>
                   <td className="td">{celda('Fusiones')}</td>
                   <td className="td">{celda('Potencias')}</td>
-                  <td className="td" style={{ textAlign: 'right' }}><div style={{ fontWeight: 500 }}>{odn.fmt$(r.valorTotal)}</div><div style={{ fontSize: 10, color: '#1A7A45' }}>a cobro {odn.fmt$(r.valorCobrado)}</div></td>
-                  <td className="td"><span className={`badge ${ESTADO_BADGE[r.estado]}`}>{r.estado}</span></td>
+                  <td className="td" style={{ textAlign: 'right' }}><div style={{ fontWeight: 500 }}>{odn.fmt$(r.valorTotal)}</div><div style={{ fontSize: 10, color: '#946200' }}>a cobro {odn.fmt$(r.valorCobrado)}</div>{r.valorPagado > 0 && <div style={{ fontSize: 10, color: '#1A7A45' }}>pagado {odn.fmt$(r.valorPagado)}</div>}</td>
+                  <td className="td"><span className={`badge ${ESTADO_BADGE[r.estado]}`}>{ETIQUETA_ESTADO(r)}</span></td>
                   <td className="td">
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="btn btn-primary btn-sm" onClick={() => openAvance(o)}>+ Avance</button>
@@ -333,7 +342,7 @@ export default function Odns() {
                     <div style={{ fontSize: 11, color: ETAPA_COLOR[e.etapa], fontWeight: 500 }}>{e.etapa}</div>
                     <div style={{ fontSize: 15, fontWeight: 500 }}>{pct(e.pct)}</div>
                     <div style={{ fontSize: 11, color: 'var(--tc-text-muted)' }}>{odn.fmt$(e.importeAvanzado)} / {odn.fmt$(e.importeAlcance)}</div>
-                    {e.cobro && <div style={{ fontSize: 11, color: '#1A7A45', marginTop: 2 }}>✓ A cobro sem {e.cobro.semana}/{e.cobro.anio} · {odn.fmt$(e.cobro.importe)}{e.cobro.tipo === 'Parcial' ? ` (parcial: ${e.cobro.motivo || 's/motivo'})` : ''}</div>}
+                    {e.cobro && <div style={{ fontSize: 11, color: e.cobro.pagado ? '#1A7A45' : '#946200', marginTop: 2 }}>{e.cobro.pagado ? `✓ Pagado ${e.cobro.pagado_fecha || ''}` : `⏳ A cobro sem ${e.cobro.semana}/${e.cobro.anio}, pendiente de pago`} · {odn.fmt$(e.cobro.importe)}{e.cobro.tipo === 'Parcial' ? ` (parcial: ${e.cobro.motivo || 's/motivo'})` : ''}</div>}
                     {e.items.map(i => <div key={i.concepto.id} style={{ fontSize: 10, color: 'var(--tc-text-muted)' }}>{i.concepto.nombre}: {i.avanzado.toLocaleString('es-MX')}/{i.alcance.toLocaleString('es-MX')} {i.concepto.unidad}</div>)}
                   </div>
                 ))}
