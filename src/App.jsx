@@ -24,9 +24,12 @@ import Empleados from './pages/Empleados'
 import Dispersion from './pages/Dispersion'
 import Esquema from './pages/Esquema'
 import Odns from './pages/Odns'
+import ResetPassword from './pages/ResetPassword'
+
 function PrivateRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading, recovery } = useAuth()
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'#6B7A99',fontSize:14 }}>Cargando...</div>
+  if (recovery) return <Navigate to="/reset-password" replace />
   return user ? children : <Navigate to="/login" replace />
 }
 
@@ -34,6 +37,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
