@@ -9,6 +9,20 @@ export const CONCEPTO_NAP = '46067708-f44f-4fa0-84fc-d587e8d2afc3'       // INST
 export const CONCEPTO_POTENCIA = 'cf1b9b75-4aa9-48fd-9b24-0ea2e27a4652'  // PRUEBA DE POTENCIA NAP (pza)
 export const ETAPAS = ['Construcción', 'Fusiones', 'Potencias', 'Otros']
 
+// Supabase limita a 1000 filas por consulta: traer todo por páginas
+async function fetchAll(query) {
+  const PAGE = 1000
+  let from = 0, all = []
+  while (true) {
+    const { data, error } = await query.range(from, from + PAGE - 1)
+    if (error) return { data: null, error }
+    all = all.concat(data || [])
+    if (!data || data.length < PAGE) break
+    from += PAGE
+  }
+  return { data: all, error: null }
+}
+
 const semanaDe = (fecha) => ({ semana: getSemanaISO(fecha), anio: new Date(fecha + 'T12:00:00').getFullYear() })
 const num = (n) => Number(n || 0)
 
@@ -28,11 +42,11 @@ export function useODN() {
     setLoading(true); setError(null)
     try {
       const [o, n, a, av, co, c] = await Promise.all([
-        supabase.from('odns').select('*').order('rama').order('tipo').order('nombre'),
-        supabase.from('odn_naps').select('*').order('nombre'),
-        supabase.from('odn_conceptos').select('*'),
-        supabase.from('odn_avances').select('*').order('fecha', { ascending: false }),
-        supabase.from('odn_cobros').select('*').order('fecha', { ascending: false }),
+        fetchAll(supabase.from('odns').select('*').order('rama').order('tipo').order('nombre')),
+        fetchAll(supabase.from('odn_naps').select('*').order('odn_id').order('nombre')),
+        fetchAll(supabase.from('odn_conceptos').select('*').order('id')),
+        fetchAll(supabase.from('odn_avances').select('*').order('fecha', { ascending: false }).order('id')),
+        fetchAll(supabase.from('odn_cobros').select('*').order('fecha', { ascending: false }).order('id')),
         supabase.from('conceptos').select('*').order('num'),
       ])
       for (const r of [o, n, a, av, co, c]) if (r.error) throw r.error
@@ -62,6 +76,8 @@ export function useODN() {
   function esEtapaPorNaps(odnId, etapa) {
     return napsDe(odnId).length > 0 && (etapa === 'Construcción' || etapa === 'Potencias')
   }
+  // Construcción hecha por otro proveedor: la etapa no cuenta para alcance, avance ni cobro
+  const construccionTercero = (odnId) => !!getODN(odnId).construccion_tercero
 
   // Resumen de un concepto dentro de una ODN: alcance, avanzado, pct, importe
   function resumenConcepto(odnId, conceptoId) {
@@ -80,6 +96,7 @@ export function useODN() {
 
   // Resumen de una etapa: conceptos, % ponderado por importe, si está terminada, cobro
   function resumenEtapa(odnId, etapa) {
+    if (etapa === 'Construcción' && construccionTercero(odnId)) return { etapa, items: [], importeAlcance: 0, importeAvanzado: 0, importeCobrable: 0, pct: 0, terminada: false, cobro: null, aplica: false, tercero: true }
     const items = alcancesDe(odnId).map(a => resumenConcepto(odnId, a.concepto_id)).filter(r => r.concepto.etapa === etapa)
     const importeAlcance = items.reduce((s, r) => s + r.importeAlcance, 0)
     const importeAvanzado = items.reduce((s, r) => s + r.importeAvanzado, 0)
@@ -367,7 +384,7 @@ export function useODN() {
 
   return {
     odns, naps, alcances, avances, cobros, conceptos, ramas, loading, error, reload: load, fmt$,
-    getConcepto, getODN, esGeneral, seCobraPorAvance, napsDe, alcancesDe, avancesDe, cobrosDe, cobroEtapa, esEtapaPorNaps,
+    getConcepto, getODN, esGeneral, seCobraPorAvance, construccionTercero, napsDe, alcancesDe, avancesDe, cobrosDe, cobroEtapa, esEtapaPorNaps,
     resumenConcepto, resumenEtapa, resumenODN, resumenSemana,
     registrarDrop, registrarNaps, registrarMedicion, registrarAvance, liberarParcial, eliminarAvance, eliminarCobro,
     marcarSemanaPagada, estadoPagoEtapa,
