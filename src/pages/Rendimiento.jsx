@@ -1,7 +1,14 @@
 import React, { useState, useMemo } from 'react'
 import { useDB } from '../hooks/useDB'
+import { useODN, CONCEPTO_DROP, CONCEPTO_NAP, CONCEPTO_POTENCIA } from '../hooks/useODN'
 import { getSemanas } from '../lib/fechas'
 import ConsultaRango from '../components/ConsultaRango'
+
+// Desde esta fecha la producción sale de ODNs y avance; antes, de la tabla produccion (histórico)
+const CORTE_ODN_DESDE = '2026-08-28'
+// Metas diarias por cuadrilla (dejar en null hasta definirlas): se comparan en la tabla diaria
+const METAS = { drop_m: 1150, naps: 30, medidos: 40, fusiones: null }
+const DIAS = ['vie', 'sáb', 'dom', 'lun', 'mar', 'mié', 'jue']
 
 const COLORES = ['#378ADD','#1D9E75','#BA7517','#D85A30','#7F77DD','#D4537E','#639922','#E24B4A']
 
@@ -67,6 +74,7 @@ function primerNDiasActivos(produccion, semIni, semFin, nDias) {
 
 export default function Rendimiento() {
   const db = useDB()
+  const odn = useODN()
   const [periodoActual, setPeriodoActual] = useState('4')
   const [refHistorico, setRefHistorico] = useState('todo')
   const [filtroCuad, setFiltroCuad] = useState('')
@@ -75,11 +83,20 @@ export default function Rendimiento() {
   const fmt$ = db.fmt$
   const cuadsSem = db.cuadrillas.filter(c => c.esquema === 'Semanal' || c.esquema === 'Ambas')
 
+  // Fuente unificada: histórico (produccion) hasta el 27-ago + avances de ODN desde el 28-ago
+  const produccion = useMemo(() => [
+    ...db.produccion.filter(r => r.fecha < CORTE_ODN_DESDE),
+    ...odn.avances.filter(a => a.fecha >= CORTE_ODN_DESDE).map(a => ({
+      id: 'av-' + a.id, fecha: a.fecha, cuadrilla_id: a.cuadrilla_id, concepto_id: a.concepto_id,
+      cantidad: Number(a.cantidad), total: Number(a.total), odn_id: a.odn_id,
+    })),
+  ], [db.produccion, odn.avances])
+
   const semsActual = useMemo(() => getSemanas(Number(periodoActual)), [periodoActual])
   const iniActual = semsActual[0]?.ini
   const finActual = semsActual[semsActual.length - 1]?.fin
 
-  const todasSems = useMemo(() => todasLasSemanas(db.produccion), [db.produccion])
+  const todasSems = useMemo(() => todasLasSemanas(produccion), [produccion])
 
   const semsRef = useMemo(() => {
     if (!todasSems.length) return []
@@ -94,10 +111,10 @@ export default function Rendimiento() {
   }, [todasSems, iniActual, refHistorico])
 
   const prodFiltrada = useMemo(() =>
-    db.produccion.filter(r =>
+    produccion.filter(r =>
       (!filtroCuad || r.cuadrilla_id === filtroCuad) &&
       (!filtroConc || r.concepto_id === filtroConc)
-    ), [db.produccion, filtroCuad, filtroConc])
+    ), [produccion, filtroCuad, filtroConc])
 
   // Semana anterior directa (siempre 1 semana atrás, independiente del filtro de referencia)
   const semAntDirecta = useMemo(() => {
@@ -126,8 +143,6 @@ export default function Rendimiento() {
   const datosComparativo = useMemo(() =>
     datosActual.map(d => {
       if (!semAntDirecta || d.dias === 0) return null
-      // Obtener los primeros N días activos de la semana anterior equivalente
-      // La semana anterior a ESTA semana específica
       const iniSemAnt = new Date(d.ini + 'T12:00:00')
       iniSemAnt.setDate(iniSemAnt.getDate() - 7)
       const finSemAnt = new Date(d.fin + 'T12:00:00')
@@ -191,7 +206,7 @@ export default function Rendimiento() {
   const rendCuadrilla = useMemo(() => {
     const cuads = filtroCuad ? cuadsSem.filter(c => c.id === filtroCuad) : cuadsSem
     return cuads.map((c, i) => {
-      const rowsAct = db.produccion.filter(r =>
+      const rowsAct = produccion.filter(r =>
         r.cuadrilla_id === c.id && r.fecha >= iniActual && r.fecha <= finActual &&
         (!filtroConc || r.concepto_id === filtroConc)
       )
@@ -200,7 +215,7 @@ export default function Rendimiento() {
       const promDiaAct = diasAct ? totalAct / diasAct : 0
 
       const rowsHist = semsRef.flatMap(s =>
-        db.produccion.filter(r =>
+        produccion.filter(r =>
           r.cuadrilla_id === c.id && r.fecha >= s.ini && r.fecha <= s.fin &&
           (!filtroConc || r.concepto_id === filtroConc)
         )
@@ -213,7 +228,7 @@ export default function Rendimiento() {
       return { id: c.id, nombre: c.nombre, color: COLORES[i % COLORES.length], totalAct, dias: diasAct, promDiaAct, promDiaHist, delta }
     }).filter(r => r.totalAct > 0)
       .sort((a, b) => b.totalAct - a.totalAct)
-  }, [db.produccion, cuadsSem, iniActual, finActual, semsRef, filtroCuad, filtroConc])
+  }, [produccion, cuadsSem, iniActual, finActual, semsRef, filtroCuad, filtroConc])
 
   const totalCuads = rendCuadrilla.reduce((a, r) => a + r.totalAct, 0) || 1
 
@@ -221,7 +236,7 @@ export default function Rendimiento() {
   const rendConcepto = useMemo(() => {
     const concs = filtroConc ? db.conceptos.filter(c => c.id === filtroConc) : db.conceptos
     return concs.map(c => {
-      const rowsAct = db.produccion.filter(r =>
+      const rowsAct = produccion.filter(r =>
         r.concepto_id === c.id && r.fecha >= iniActual && r.fecha <= finActual &&
         (!filtroCuad || r.cuadrilla_id === filtroCuad)
       )
@@ -233,7 +248,7 @@ export default function Rendimiento() {
       const promDiaAct = diasAct ? totalAct / diasAct : 0
 
       const rowsHist = semsRef.flatMap(s =>
-        db.produccion.filter(r =>
+        produccion.filter(r =>
           r.concepto_id === c.id && r.fecha >= s.ini && r.fecha <= s.fin &&
           (!filtroCuad || r.cuadrilla_id === filtroCuad)
         )
@@ -245,11 +260,11 @@ export default function Rendimiento() {
 
       return { id: c.id, nombre: c.nombre, unidad: c.unidad, totalAct, cantAct, promUnitAct, promDiaAct, promDiaHist, delta }
     }).filter(Boolean).sort((a, b) => b.totalAct - a.totalAct)
-  }, [db.produccion, db.conceptos, iniActual, finActual, semsRef, filtroCuad, filtroConc])
+  }, [produccion, db.conceptos, iniActual, finActual, semsRef, filtroCuad, filtroConc])
 
   const totalConcs = rendConcepto.reduce((a, r) => a + r.totalAct, 0) || 1
 
-  if (db.loading) return <div className="text-gray-400 py-12 text-center">Cargando...</div>
+  if (db.loading || odn.loading) return <div className="text-gray-400 py-12 text-center">Cargando...</div>
 
   const labelTendencia = tendencia === null ? null : tendencia >= 0
     ? <span style={{ color: '#16a34a', fontWeight: 700 }}>▲ Al alza {tendencia.toFixed(1)}% vs sem anterior</span>
@@ -269,7 +284,7 @@ export default function Rendimiento() {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-lg font-medium">Rendimiento</h2>
-          <div className="text-xs text-gray-400">Análisis de tendencia · comparación normalizada por día activo</div>
+          <div className="text-xs text-gray-400">Análisis de tendencia · comparación normalizada por día activo · fuente: ODNs y avance (histórico hasta 27-ago)</div>
         </div>
       </div>
 
@@ -373,7 +388,6 @@ export default function Rendimiento() {
               const deltaHist = histRef.promDiario && d.promDia ? ((d.promDia - histRef.promDiario) / histRef.promDiario) * 100 : null
               return (
                 <React.Fragment key={i}>
-                  {/* Fila semana actual */}
                   <tr>
                     <td className="td text-xs font-medium">
                       {d.label}
@@ -388,7 +402,6 @@ export default function Rendimiento() {
                     <td className="td text-right">{d.promDia ? deltaBadge(deltaHist) : <span className="text-xs text-gray-400">—</span>}</td>
                     <td className="td text-right">{comp ? deltaBadge(comp.deltaVsEquiv) : <span className="text-xs text-gray-400">—</span>}</td>
                   </tr>
-                  {/* Fila comparativa semana anterior (mismos días) */}
                   {comp && (
                     <tr key={`comp-${i}`} style={{ background: 'var(--tc-bg-subtle, rgba(0,0,0,0.03))' }}>
                       <td className="td text-xs text-gray-400 pl-6">
@@ -406,6 +419,65 @@ export default function Rendimiento() {
           </tbody>
         </table>
       </div>
+
+      {/* Detalle diario por cuadrilla — última semana del período (cantidades físicas) */}
+      {(() => {
+        const sem = semsActual[semsActual.length - 1]
+        if (!sem) return null
+        const d0 = new Date(sem.ini + 'T12:00:00')
+        const fechas = Array.from({ length: 7 }, (_, i) => { const d = new Date(d0); d.setDate(d0.getDate() + i); return d.toISOString().split('T')[0] })
+        const avs = produccion.filter(r => r.fecha >= sem.ini && r.fecha <= sem.fin && (!filtroCuad || r.cuadrilla_id === filtroCuad))
+        const cuads = [...new Set(avs.map(r => r.cuadrilla_id))].map(id => ({ id, nombre: id ? db.getCuadrilla(id).nombre : 'Sin cuadrilla' })).sort((a, b) => a.nombre.localeCompare(b.nombre))
+        if (!cuads.length) return null
+        const etapaDe = (cid) => db.getConcepto(cid)?.etapa
+        const cell = (rows) => {
+          const drop = rows.filter(r => r.concepto_id === CONCEPTO_DROP).reduce((a, r) => a + r.cantidad, 0)
+          const naps = rows.filter(r => r.concepto_id === CONCEPTO_NAP).reduce((a, r) => a + r.cantidad, 0)
+          const med = rows.filter(r => r.concepto_id === CONCEPTO_POTENCIA).reduce((a, r) => a + r.cantidad, 0)
+          const fus = rows.filter(r => etapaDe(r.concepto_id) === 'Fusiones').reduce((a, r) => a + r.cantidad, 0)
+          const tend = rows.filter(r => db.getConcepto(r.concepto_id)?.nombre?.toUpperCase().includes('TENDIDO') || db.getConcepto(r.concepto_id)?.nombre?.toUpperCase().includes('HILADO')).reduce((a, r) => a + r.cantidad, 0)
+          const total = rows.reduce((a, r) => a + r.total, 0)
+          return { drop, naps, med, fus, tend, total }
+        }
+        const meta = (v, m) => m == null ? 'var(--tc-text)' : v >= m ? '#16a34a' : v >= m * 0.7 ? '#BA7517' : '#dc2626'
+        const Linea = ({ c }) => (
+          <div style={{ fontSize: 10, lineHeight: 1.35 }}>
+            {c.drop > 0 && <div style={{ color: meta(c.drop, METAS.drop_m) }}>drop {c.drop.toLocaleString('es-MX')} m</div>}
+            {c.naps > 0 && <div style={{ color: meta(c.naps, METAS.naps) }}>{c.naps} NAP</div>}
+            {c.med > 0 && <div style={{ color: meta(c.med, METAS.medidos) }}>{c.med} med</div>}
+            {c.fus > 0 && <div style={{ color: meta(c.fus, METAS.fusiones) }}>{c.fus} fus</div>}
+            {c.tend > 0 && <div>{c.tend.toLocaleString('es-MX')} m tend</div>}
+            {c.total > 0 && <div style={{ color: 'var(--tc-text-muted)' }}>{fmt$(c.total)}</div>}
+          </div>
+        )
+        return (
+          <div className="card mb-4" style={{ overflowX: 'auto' }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium">Detalle diario por cuadrilla · {sem.label}</span>
+              <span className="text-xs text-gray-400 italic">{METAS.drop_m == null ? 'Sin metas configuradas' : 'Verde ≥ meta · ámbar ≥ 70% · rojo < 70%'}</span>
+            </div>
+            <table className="w-full">
+              <thead><tr>
+                <th className="th">Cuadrilla</th>
+                {fechas.map((f, i) => <th key={f} className="th text-center" style={{ fontSize: 10 }}>{DIAS[i]} {f.slice(8)}</th>)}
+                <th className="th text-right">Semana</th>
+              </tr></thead>
+              <tbody>
+                {cuads.map(cu => {
+                  const rowsC = avs.filter(r => r.cuadrilla_id === cu.id)
+                  return (
+                    <tr key={cu.id || 'sin'}>
+                      <td className="td text-xs font-medium">{cu.nombre}</td>
+                      {fechas.map(f => { const c = cell(rowsC.filter(r => r.fecha === f)); return <td key={f} className="td" style={{ verticalAlign: 'top', textAlign: 'center' }}>{c.total > 0 ? <Linea c={c} /> : <span style={{ color: '#A0AABB' }}>·</span>}</td> })}
+                      <td className="td" style={{ verticalAlign: 'top', textAlign: 'right' }}><Linea c={cell(rowsC)} /></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      })()}
 
       {/* Rendimiento por cuadrilla */}
       <div className="card mb-4">
