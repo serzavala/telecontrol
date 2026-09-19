@@ -58,7 +58,8 @@ export default function Odns() {
 
   function openAvance(o) {
     const r = odn.resumenODN(o.id)
-    const modo = r.naps.length ? (r.napsDrop < r.naps.length ? 'drop' : r.napsInstaladas < r.naps.length ? 'naps' : 'potencias') : 'concepto'
+    const terc = odn.construccionTercero(o.id)
+    const modo = r.naps.length ? (!terc && r.napsDrop < r.naps.length ? 'drop' : !terc && r.napsInstaladas < r.naps.length ? 'naps' : 'potencias') : 'concepto'
     setAv({ modo, nap_ids: [], concepto_id: '', cantidad: '', porcentaje: '', cuadrilla_id: '', fecha: hoyStr(), notas: '', motivo: '' })
     setAvanceModal(o)
   }
@@ -176,6 +177,7 @@ export default function Odns() {
               const et = (nombre) => r.etapas.find(e => e.etapa === nombre)
               const celda = (nombre) => {
                 const e = et(nombre)
+                if (nombre === 'Construcción' && odn.construccionTercero(o.id)) return <span style={{ color: '#A0AABB', fontSize: 11, fontStyle: 'italic' }}>Otro proveedor</span>
                 if (!e) return <span style={{ color: '#A0AABB', fontSize: 11 }}>—</span>
                 const pago = odn.estadoPagoEtapa(o.id, nombre)
                 const colorPago = pago === 'pagado' ? '#1A7A45' : pago === 'pendiente' ? '#946200' : 'var(--tc-text-muted)'
@@ -197,8 +199,8 @@ export default function Odns() {
                 <tr key={o.id}>
                   <td className="td"><div style={{ fontWeight: 500 }}>{o.nombre}</div><div style={{ fontSize: 11, color: 'var(--tc-text-muted)' }}>Rama {o.rama} · {o.tipo}{o.colonia ? ` · ${o.colonia}` : ''}</div></td>
                   <td className="td" style={{ textAlign: 'center', fontSize: 11 }}>{r.naps.length ? <>
-                    <div>drop <strong>{r.napsDrop}</strong>/{r.naps.length}</div>
-                    <div>nap <strong>{r.napsInstaladas}</strong>/{r.naps.length}</div>
+                    {!odn.construccionTercero(o.id) && <div>drop <strong>{r.napsDrop}</strong>/{r.naps.length}</div>}
+                    {!odn.construccionTercero(o.id) && <div>nap <strong>{r.napsInstaladas}</strong>/{r.naps.length}</div>}
                     <div style={{ color: 'var(--tc-text-muted)' }}>med {r.napsMedidas}/{r.naps.length}</div>
                   </> : '—'}</td>
                   <td className="td" style={{ textAlign: 'right', fontSize: 12 }}>{r.naps.length ? r.mlTotal.toLocaleString('es-MX') : '—'}</td>
@@ -243,8 +245,8 @@ export default function Odns() {
               <div className="form-row c3">
                 <div><label className="label">Tipo de avance</label>
                   <select className="input" value={av.modo} onChange={e => setAv(f => ({ ...f, modo: e.target.value, nap_ids: [], concepto_id: '' }))}>
-                    {r.naps.length > 0 && <option value="drop">Drop tendido (metros por NAP)</option>}
-                    {r.naps.length > 0 && <option value="naps">NAP instalado (piezas)</option>}
+                    {r.naps.length > 0 && !odn.construccionTercero(avanceModal.id) && <option value="drop">Drop tendido (metros por NAP)</option>}
+                    {r.naps.length > 0 && !odn.construccionTercero(avanceModal.id) && <option value="naps">NAP instalado (piezas)</option>}
                     {r.naps.length > 0 && <option value="potencias">Potencias (NAPs medidos)</option>}
                     {conceptosDisp.length > 0 && <option value="concepto">Fusiones / tendido / otro</option>}
                   </select>

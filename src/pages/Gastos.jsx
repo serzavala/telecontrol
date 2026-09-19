@@ -6,12 +6,14 @@ import Modal from '../components/Modal'
 const CATEGORIAS = ['Combustible','Herramientas','Viáticos','Hospedaje','Renta de equipo','Comunicación','Mantenimiento','Otros']
 const CATBADGE = { Combustible:'badge-amber', Herramientas:'badge-blue', 'Viáticos':'badge-novus', Hospedaje:'badge-novus', 'Renta de equipo':'badge-gray', Comunicación:'badge-gray', Mantenimiento:'badge-amber', Otros:'badge-gray' }
 
-const FORM_INICIAL = () => ({ fecha: '', semana: '', anio: new Date().getFullYear(), categoria: 'Combustible', concepto: '', cuadrilla_id: '', empleado_id: '', monto: '', comprobante: '', comentarios: '', prestado_por: 'empresa', prestado_por_empleado_id: '' })
+const FORM_INICIAL = () => ({ fecha: '', semana: '', anio: new Date().getFullYear(), categoria: 'Combustible', concepto: '', cuadrilla_id: '', empleado_id: '', vehiculo_id: '', monto: '', comprobante: '', comentarios: '', prestado_por: 'empresa', prestado_por_empleado_id: '' })
 
 export default function Gastos() {
   const ig = useIG()
   const db = useDB()
-  const [filtros, setFiltros] = useState({ semana: '', cuadrilla_id: '', empleado_id: '', categoria: '', asignacion: '' })
+  const [filtros, setFiltros] = useState({ semana: '', cuadrilla_id: '', empleado_id: '', vehiculo_id: '', categoria: '', asignacion: '' })
+  const vehLabel = v => v ? `${v.placa || ''}${v.descripcion ? ' · ' + v.descripcion : v.modelo ? ' · ' + v.modelo : ''}` : '—'
+  const getVehiculo = id => ig.vehiculos.find(v => v.id === id)
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState(FORM_INICIAL())
   const [saving, setSaving] = useState(false)
@@ -22,12 +24,16 @@ export default function Gastos() {
     (!filtros.semana || r.semana == filtros.semana) &&
     (!filtros.cuadrilla_id || r.cuadrilla_id === filtros.cuadrilla_id) &&
     (!filtros.empleado_id || r.empleado_id === filtros.empleado_id) &&
+    (!filtros.vehiculo_id || r.vehiculo_id === filtros.vehiculo_id) &&
     (!filtros.categoria || r.categoria === filtros.categoria) &&
-    (!filtros.asignacion || (filtros.asignacion === 'general' ? !r.empleado_id : !!r.empleado_id))
+    (!filtros.asignacion ||
+      (filtros.asignacion === 'general' ? (!r.empleado_id && !r.vehiculo_id) :
+       filtros.asignacion === 'personal' ? !!r.empleado_id : !!r.vehiculo_id))
   )
   const total = rows.reduce((a, r) => a + Number(r.monto), 0)
-  const totalGeneral = rows.filter(r => !r.empleado_id).reduce((a, r) => a + Number(r.monto), 0)
+  const totalGeneral = rows.filter(r => !r.empleado_id && !r.vehiculo_id).reduce((a, r) => a + Number(r.monto), 0)
   const totalPersonal = rows.filter(r => r.empleado_id).reduce((a, r) => a + Number(r.monto), 0)
+  const totalVehiculos = rows.filter(r => r.vehiculo_id).reduce((a, r) => a + Number(r.monto), 0)
   const pendientesReembolso = rows.filter(r => r.prestado_por === 'empleado' && !r.reembolsado)
   const totalPendiente = pendientesReembolso.reduce((a, r) => a + Number(r.monto), 0)
   const Prestado = ({ r }) => r.prestado_por !== 'empleado' ? null : (
@@ -47,6 +53,7 @@ export default function Gastos() {
       semana: parseInt(form.semana), anio: parseInt(form.anio), monto: parseFloat(form.monto),
       cuadrilla_id: form.cuadrilla_id || null,
       empleado_id: form.empleado_id || null,
+      vehiculo_id: form.vehiculo_id || null,
       prestado_por: form.prestado_por,
       prestado_por_empleado_id: form.prestado_por === 'empleado' ? form.prestado_por_empleado_id : null,
       reembolsado: false,
@@ -89,7 +96,14 @@ export default function Gastos() {
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="label">Vehículo</label>
+            <select className="input" value={filtros.vehiculo_id} onChange={setFilt('vehiculo_id')}>
+              <option value="">Todos</option>
+              {ig.vehiculos.map(v => <option key={v.id} value={v.id}>{vehLabel(v)}</option>)}
+            </select>
+          </div>
           <div>
             <label className="label">Categoría</label>
             <select className="input" value={filtros.categoria} onChange={setFilt('categoria')}>
@@ -103,6 +117,7 @@ export default function Gastos() {
               <option value="">Todos</option>
               <option value="general">Solo generales</option>
               <option value="personal">Solo por empleado</option>
+              <option value="vehiculo">Solo por vehículo</option>
             </select>
           </div>
         </div>
@@ -117,12 +132,12 @@ export default function Gastos() {
         <div className="metric metric-light">
           <div className="metric-label">Generales</div>
           <div className="metric-value" style={{ color: '#A82020' }}>{ig.fmt$(totalGeneral)}</div>
-          <div className="metric-sub">Sin empleado</div>
+          <div className="metric-sub">Sin empleado ni vehículo</div>
         </div>
         <div className="metric metric-light">
-          <div className="metric-label">Por empleado</div>
-          <div className="metric-value" style={{ color: '#A82020' }}>{ig.fmt$(totalPersonal)}</div>
-          <div className="metric-sub">Personales</div>
+          <div className="metric-label">Por empleado / vehículo</div>
+          <div className="metric-value" style={{ color: '#A82020' }}>{ig.fmt$(totalPersonal + totalVehiculos)}</div>
+          <div className="metric-sub">{ig.fmt$(totalPersonal)} empleados · {ig.fmt$(totalVehiculos)} vehículos</div>
         </div>
         <div className={`metric ${totalPendiente > 0 ? 'metric-gold' : 'metric-light'}`}>
           <div className="metric-label">Por reembolsar</div>
@@ -140,7 +155,7 @@ export default function Gastos() {
             <th className="th w-28">Categoría</th>
             <th className="th">Concepto</th>
             <th className="th w-24">Cuadrilla</th>
-            <th className="th w-28">Empleado</th>
+            <th className="th w-28">Empleado / Vehículo</th>
             <th className="th w-24 text-right">Monto</th>
             <th className="th w-16"></th>
           </tr></thead>
@@ -155,7 +170,11 @@ export default function Gastos() {
                   <td className="td"><span className={`badge ${CATBADGE[r.categoria] || 'badge-gray'}`}>{r.categoria}</span></td>
                   <td className="td"><div className="truncate">{r.concepto}</div><Prestado r={r} /></td>
                   <td className="td" style={{ fontSize: 12 }}>{r.cuadrilla_id ? c.nombre : <span style={{ color: '#A0AABB' }}>—</span>}</td>
-                  <td className="td">{r.empleado_id ? <span style={{ fontWeight: 500 }}>{emp.nombre}</span> : <span style={{ color: '#A0AABB', fontSize: 12 }}>— General</span>}</td>
+                  <td className="td">
+                    {r.empleado_id ? <span style={{ fontWeight: 500 }}>{emp.nombre}</span>
+                      : r.vehiculo_id ? <span style={{ fontWeight: 500 }}>🚚 {vehLabel(getVehiculo(r.vehiculo_id))}</span>
+                      : <span style={{ color: '#A0AABB', fontSize: 12 }}>— General</span>}
+                  </td>
                   <td className="td text-right font-medium" style={{ color: '#A82020' }}>{ig.fmt$(r.monto)}</td>
                   <td className="td"><button className="btn btn-outline btn-sm" onClick={() => ig.deleteGasto(r.id)}>Eliminar</button></td>
                 </tr>
@@ -181,7 +200,7 @@ export default function Gastos() {
                 <div><span className="font-medium">Semana:</span> {r.semana}</div>
                 <div><span className="font-medium">Fecha:</span> {r.fecha}</div>
                 <div><span className="font-medium">Cuadrilla:</span> {r.cuadrilla_id ? c.nombre : '—'}</div>
-                <div><span className="font-medium">Empleado:</span> {r.empleado_id ? emp.nombre : 'General'}</div>
+                <div><span className="font-medium">{r.vehiculo_id ? 'Vehículo:' : 'Empleado:'}</span> {r.empleado_id ? emp.nombre : r.vehiculo_id ? vehLabel(getVehiculo(r.vehiculo_id)) : 'General'}</div>
                 {r.comprobante && <div className="col-span-2"><span className="font-medium">Ref:</span> {r.comprobante}</div>}
                 {r.comentarios && <div className="col-span-2"><span className="font-medium">Notas:</span> {r.comentarios}</div>}
               </div>
@@ -214,14 +233,20 @@ export default function Gastos() {
           {/* ¿A quién corresponde? */}
           <div style={{ background: 'var(--tc-bg)', borderRadius: 8, padding: '10px 12px' }}>
             <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--tc-text-muted)', marginBottom: 8 }}>
-              ¿A quién corresponde el gasto? <span style={{ fontWeight: 400 }}>(opcional, solo para filtros y reportes)</span>
+              ¿A quién corresponde el gasto? <span style={{ fontWeight: 400 }}>(opcional: empleado, vehículo y/o cuadrilla — solo para filtros y reportes)</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div><label className="label">Empleado</label>
                 <select className="input" value={form.empleado_id}
                   onChange={e => { const emp = ig.empleados.find(x => x.id === e.target.value); setForm(f => ({ ...f, empleado_id: e.target.value, cuadrilla_id: emp?.cuadrilla_id || f.cuadrilla_id })) }}>
                   <option value="">Sin asignar (gasto general)</option>
                   {ig.empleados.map(e => <option key={e.id} value={e.id}>{e.numero} — {e.nombre}</option>)}
+                </select>
+              </div>
+              <div><label className="label">Vehículo</label>
+                <select className="input" value={form.vehiculo_id} onChange={setF('vehiculo_id')}>
+                  <option value="">Ninguno</option>
+                  {ig.vehiculos.map(v => <option key={v.id} value={v.id}>{vehLabel(v)}</option>)}
                 </select>
               </div>
               <div><label className="label">Cuadrilla {form.empleado_id && <span style={{ fontWeight: 400, color: 'var(--tc-text-muted)' }}>(auto, editable)</span>}</label>

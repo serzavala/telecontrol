@@ -13,7 +13,7 @@ export default function Prestamos() {
   const [prestamoActual, setPrestamoActual] = useState(null)
   const [historial, setHistorial] = useState([])
   const [loadingHistorial, setLoadingHistorial] = useState(false)
-  const [form, setForm] = useState({ tipo: 'Personal', empleado_id: '', fecha: '', monto_original: '', descuento_semanal: '', concepto: '', notas: '' })
+  const [form, setForm] = useState({ tipo: 'Personal', empleado_id: '', fecha: '', monto_original: '', descuento_semanal: '', concepto: '', notas: '', prestado_por: 'empresa', prestado_por_empleado_id: '' })
   const [editForm, setEditForm] = useState({})
   const [pagoForm, setPagoForm] = useState({ monto: '', fecha: new Date().toISOString().split('T')[0], notas: '' })
   const [saving, setSaving] = useState(false)
@@ -28,14 +28,24 @@ export default function Prestamos() {
   const semanasEst = form.monto_original && form.descuento_semanal
     ? Math.ceil(parseFloat(form.monto_original) / parseFloat(form.descuento_semanal)) : 0
 
-  async function handleSave(e) {
+    async function handleSave(e) {
     e.preventDefault()
     if (!form.empleado_id || !form.fecha || !form.monto_original) { alert('Completa los campos obligatorios.'); return }
+    if (form.prestado_por === 'empleado' && !form.prestado_por_empleado_id) { alert('Indica quién puso el dinero.'); return }
+    if (form.prestado_por === 'empleado' && form.prestado_por_empleado_id === form.empleado_id) { alert('Quien presta y quien recibe no pueden ser la misma persona.'); return }
     setSaving(true)
-    await ig.addPrestamo({ ...form, monto_original: parseFloat(form.monto_original), descuento_semanal: parseFloat(form.descuento_semanal) || 0 })
+    const { error } = await ig.addPrestamo({
+      ...form,
+      monto_original: parseFloat(form.monto_original),
+      descuento_semanal: parseFloat(form.descuento_semanal) || 0,
+      prestado_por: form.prestado_por,
+      prestado_por_empleado_id: form.prestado_por === 'empleado' ? form.prestado_por_empleado_id : null,
+      reembolsado: false,
+    })
     setSaving(false)
+    if (error) { alert('Error al guardar: ' + error.message); return }
     setModal(false)
-    setForm({ tipo: 'Personal', empleado_id: '', fecha: '', monto_original: '', descuento_semanal: '', concepto: '', notas: '' })
+    setForm({ tipo: 'Personal', empleado_id: '', fecha: '', monto_original: '', descuento_semanal: '', concepto: '', notas: '', prestado_por: 'empresa', prestado_por_empleado_id: '' })
   }
 
   function openEdit(p) {
@@ -162,6 +172,11 @@ export default function Prestamos() {
                   <td className="td" style={{ fontSize: 11 }}>{p.fecha}</td>
                   <td className="td" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <div>{p.concepto || '—'}</div>
+                    {p.prestado_por === 'empleado' && (
+                      <div style={{ fontSize: 11, color: p.reembolsado ? '#1A7A45' : '#946200', marginTop: 2 }}>
+                        {p.reembolsado ? '✓ Reembolsado a ' : '⏳ Dinero de '}<strong>{ig.getEmpleado(p.prestado_por_empleado_id).nombre}</strong>{p.reembolsado && p.reembolso_fecha ? ` · ${p.reembolso_fecha}` : ''}
+                      </div>
+                    )}
                     {p.estado === 'Activo' && (
                       <div style={{ marginTop: 4, height: 4, background: '#E8ECF4', borderRadius: 2, width: '100%' }}>
                         <div style={{ height: '100%', background: '#0F3460', borderRadius: 2, width: pct + '%', transition: 'width .3s' }} />
@@ -223,6 +238,30 @@ export default function Prestamos() {
               Se liquidaría en aproximadamente <strong>{semanasEst} semana{semanasEst !== 1 ? 's' : ''}</strong>.
             </div>
           )}
+            <div style={{ background: form.prestado_por === 'empleado' ? 'rgba(245,166,35,0.12)' : 'var(--tc-bg)', border: form.prestado_por === 'empleado' ? '1px solid #F5A623' : '1px solid transparent', borderRadius: 8, padding: '10px 12px' }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--tc-text-muted)', marginBottom: 8 }}>¿De dónde sale el dinero? *</div>
+            <div className="form-row c2">
+              <div><label className="label">Prestado por</label>
+                <select className="input" value={form.prestado_por} onChange={e => setForm(f => ({ ...f, prestado_por: e.target.value, prestado_por_empleado_id: e.target.value === 'empresa' ? '' : f.prestado_por_empleado_id }))}>
+                  <option value="empresa">Empresa (caja / cuenta)</option>
+                  <option value="empleado">Un socio o empleado lo puso de su bolsa</option>
+                </select>
+              </div>
+              {form.prestado_por === 'empleado' && (
+                <div><label className="label">¿Quién puso el dinero? *</label>
+                  <select className="input" value={form.prestado_por_empleado_id} onChange={setF('prestado_por_empleado_id')} required>
+                    <option value="">Seleccionar...</option>
+                    {ig.empleados.filter(e => e.id !== form.empleado_id).map(e => <option key={e.id} value={e.id}>{e.numero} — {e.nombre}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+            {form.prestado_por === 'empleado' && form.prestado_por_empleado_id && (
+              <div style={{ fontSize: 12, color: '#946200', marginTop: 8 }}>
+                La empresa asume el préstamo: a <strong>{ig.getEmpleado(form.prestado_por_empleado_id).nombre}</strong> se le reembolsa completo en su siguiente nómina, y al empleado se le descuenta en parcialidades como siempre.
+              </div>
+            )}
+          </div>
           <div><label className="label">Notas</label><textarea className="input" rows={2} value={form.notas} onChange={setF('notas')} /></div>
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" className="btn btn-outline" onClick={() => setModal(false)}>Cancelar</button>
