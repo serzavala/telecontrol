@@ -288,7 +288,7 @@ export default function Rendimiento() {
         </div>
       </div>
 
-      <ConsultaRango db={db} />
+      <ConsultaRango db={{ ...db, produccion }} />
 
       {/* Filtros */}
       <div className="card mb-4">
